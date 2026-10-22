@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>NTU EduBot v2.0 - Trợ lý Học vụ Thông minh Toàn diện cho Sinh viên</title>
+  <meta name="description" content="Hệ thống AI Tra cứu Quy chế Học vụ Đại học Nguyễn Trãi v2.0 ứng dụng Vietnamese Hybrid Search, RAG và Gemini 2.5 Flash.">
+  <link rel="icon" type="image/svg+xml" href="/assets/ntu-logo.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- ====================================================================
+         SIDEBAR: Knowledge Base & Configuration
+         ==================================================================== -->
+    <aside class="sidebar" id="sidebar">
+      <!-- Brand Header -->
+      <div class="sidebar-header">
+        <img src="/assets/ntu-logo.svg" alt="NTU Logo" class="sidebar-logo">
+        <div class="brand-info">
+          <div class="brand-title">
+            <span>NTU EduBot</span>
+            <span class="brand-badge">v2.0</span>
+          </div>
+          <span class="brand-sub">Trợ lý Học vụ Toàn diện</span>
+        </div>
+      </div>
+
+      <!-- Health Status Badge -->
+      <div class="health-status-bar">
+        <div class="health-indicator">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Đang kết nối...</span>
+        </div>
+      </div>
+
+      <!-- Sidebar Quick Utility Card (Summary) -->
+      <div class="sidebar-quick-action">
+        <div class="sidebar-summary-card" id="btn-sidebar-gpa-calc" role="button" tabindex="0" title="Bấm để mở Công cụ Tính điểm & Xét Học bổng">
+          <div class="summary-card-header">
+            <span class="summary-icon">🧮</span>
+            <span class="summary-title">Tiện ích Học vụ NTU</span>
+            <span class="summary-badge">Alt+C</span>
+          </div>
+          <div class="summary-card-desc">Tra cứu nhanh học bổng KKHT, tính GPA & quy đổi thang điểm 4.</div>
+        </div>
+      </div>
+
+      <!-- Sidebar Scrollable Body -->
+      <div class="sidebar-content">
+        <!-- Section: Documents List (Default view for Students) -->
+        <div class="documents-section">
+          <div class="section-label">
+            <span>Kho Quy chế đã nạp</span>
+            <span class="badge-count" id="doc-count-badge">NTU</span>
+          </div>
+          <div class="documents-container" id="documents-list">
+            <div style="font-size:0.75rem; color:#64748b; padding:8px 0;">Đang tải danh mục quy chế...</div>
+          </div>
+        </div>
+
+        <!-- Section: Admin Upload Accordion (Collapsed by default for neatness) -->
+        <div class="sidebar-accordion">
+          <button type="button" class="accordion-toggle" id="btn-toggle-upload" aria-expanded="false">
+            <div class="accordion-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+              <span>Quản trị Kho Quy chế</span>
+              <span class="admin-badge">Admin</span>
+            </div>
+            <svg class="accordion-arrow" id="accordion-arrow-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+
+          <div class="accordion-body collapsed" id="upload-accordion-body">
+            <div class="upload-card">
+              <input 
+                type="text" 
+                id="doc-title-input" 
+                class="input-field" 
+                placeholder="Tên quy chế (VD: Quy chế Đào tạo 2026)"
+              >
+              
+              <input 
+                type="file" 
+                id="file-input" 
+                accept=".pdf,.png,.jpg,.jpeg,.webp,.txt" 
+                style="display:none;"
+              >
+
+              <div class="file-dropzone" id="file-dropzone">
+                <div class="dropzone-icon">📄</div>
+                <div class="dropzone-text" id="dropzone-text">Kéo thả PDF, Scan ảnh hoặc bấm để chọn</div>
+                <div class="dropzone-hint">Hỗ trợ PDF (kèm OCR), WebP, Ảnh, Text</div>
+              </div>
+
+              <!-- Camera Scanner Trigger Buttons -->
+              <div class="camera-actions-row">
+                <input 
+                  type="file" 
+                  id="smartphone-camera-input" 
+                  accept="image/*" 
+                  capture="environment" 
+                  style="display:none;"
+                >
+                <button type="button" id="btn-smartphone-camera" class="btn-camera-opt btn-phone-cam" title="Mở trực tiếp Camera điện thoại để chụp ảnh trang giấy">
+                  <span>📱 Camera Điện thoại</span>
+                </button>
+                <button type="button" id="btn-open-live-scanner" class="btn-camera-opt btn-live-cam" title="Mở khung ngắm quét Live Camera / Webcam">
+                  <span>📸 Quét Live Camera</span>
+                </button>
+              </div>
+
+              <!-- Camera Captured Thumbnail Preview Box -->
+              <div id="camera-preview-box" class="camera-preview-box" style="display:none;">
+                <img id="camera-preview-img" alt="Ảnh chụp" class="camera-thumb">
+                <div class="camera-preview-info">
+                  <div id="camera-preview-name" class="camera-preview-name">anh_camera.jpg</div>
+                  <div class="camera-preview-hint">Đã sẵn sàng tiền xử lý & nạp OCR</div>
+                </div>
+                <button type="button" id="btn-cancel-cam-preview" class="btn-cancel-cam" title="Hủy ảnh này">✕</button>
+              </div>
+
+              <button type="button" id="btn-upload" class="btn-upload">
+                <span>Nạp vào Kho Tri thức</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <button type="button" id="btn-clear-chat" class="btn-clear-chat">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M3 21v-5h5"/>
+          </svg>
+          <span>Làm mới cuộc trò chuyện</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ====================================================================
+         MAIN CHAT WORKSPACE
+         ==================================================================== -->
+    <main class="main-chat">
+      <!-- Topbar -->
+      <header class="chat-topbar">
+        <div class="topbar-left">
+          <button type="button" id="btn-toggle-sidebar" class="btn-toggle-sidebar" aria-label="Toggle Sidebar">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <div class="session-badge" id="session-display">Phiên: Đang khởi tạo...</div>
+        </div>
+
+        <div class="topbar-center">
+          <!-- Topbar GPA Calculator Launch Button with Alt+C Shortcut -->
+          <button type="button" id="btn-open-gpa-calc" class="btn-gpa-tool" title="Công cụ Tính điểm & Xét Học bổng NTU (Phím tắt: Alt+C)">
+            <span class="btn-tool-icon">🧮</span>
+            <span>Tính điểm & Xét Học bổng</span>
+            <kbd class="shortcut-kbd">Alt+C</kbd>
+          </button>
+
+          <!-- Topbar Live Camera Scanner Button -->
+          <button type="button" id="btn-topbar-camera" class="btn-gpa-tool btn-topbar-scan" title="Quét tài liệu quy chế bằng Camera (Webcam / Smartphone)">
+            <span class="btn-tool-icon">📸</span>
+            <span>Quét Camera</span>
+          </button>
+        </div>
+
+        <div class="topbar-right">
+          <!-- TopK selector -->
+          <div class="control-group">
+            <label for="select-topk">Trích dẫn:</label>
+            <select id="select-topk" class="select-topk">
+              <option value="3">Top 3 đoạn</option>
+              <option value="5" selected>Top 5 đoạn</option>
+              <option value="8">Top 8 đoạn</option>
+            </select>
+          </div>
+
+          <!-- Auto TTS Toggle -->
+          <div class="control-group">
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-auto-tts">
+              <span class="toggle-slider"></span>
+              <span>Tự động đọc</span>
+            </label>
+          </div>
+
+          <!-- Dark / Light Academic Theme Switcher -->
+          <button type="button" id="btn-toggle-theme" class="btn-theme-toggle" title="Chuyển chế độ Giao diện (Sáng / Tối)" aria-label="Toggle Theme">
+            <span id="theme-icon">🌙</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Chat Messages Container -->
+      <section class="chat-messages" id="chat-messages">
+        <!-- Welcome Screen (Default empty state) -->
+        <div class="welcome-screen" id="welcome-screen">
+          <img src="/assets/ntu-logo.svg" alt="NTU Emblem" class="welcome-logo">
+          <h1 class="welcome-title">NTU EduBot v2.0 - Trợ lý Học vụ Đại học Nguyễn Trãi</h1>
+          <p class="welcome-desc">
+            Trợ lý AI chuyên sâu giải đáp thắc mắc về <strong>Quy chế đào tạo tín chỉ, thang điểm, học bổng KKHT, cảnh báo học vụ, chuẩn đầu ra tốt nghiệp</strong> và giới thiệu Trường Đại học Nguyễn Trãi.
+          </p>
+
+          <!-- Suggested Prompt Cards -->
+          <div class="prompt-suggestions">
+            <div class="prompt-card" data-prompt="Giới thiệu về Trường Đại học Nguyễn Trãi (NTU) và các ngành đào tạo mũi nhọn?">
+              <div class="prompt-card-icon">🏛️</div>
+              <div class="prompt-card-text">Giới thiệu tổng quan về Đại học Nguyễn Trãi?</div>
+            </div>
+
+            <div class="prompt-card" data-prompt="Điều kiện xét học bổng khuyến khích học tập tại Đại học Nguyễn Trãi là gì?">
+              <div class="prompt-card-icon">🎓</div>
+              <div class="prompt-card-text">Điều kiện xét học bổng khuyến khích học tập là gì?</div>
+            </div>
+
+            <div class="prompt-card" data-prompt="Sinh viên bị cảnh báo học vụ khi điểm trung bình chung học kỳ dưới bao nhiêu?">
+              <div class="prompt-card-icon">⚠️</div>
+              <div class="prompt-card-text">Sinh viên bị cảnh báo học vụ khi điểm dưới bao nhiêu?</div>
+            </div>
+
+            <div class="prompt-card" data-prompt="Quy định về việc đăng ký học lại và đăng ký học cải thiện điểm như thế nào?">
+              <div class="prompt-card-icon">📚</div>
+              <div class="prompt-card-text">Quy định về đăng ký học lại và cải thiện điểm?</div>
+            </div>
+
+            <div class="prompt-card" data-prompt="Điều kiện để sinh viên được nhận đồ án, khóa luận tốt nghiệp là gì?">
+              <div class="prompt-card-icon">📝</div>
+              <div class="prompt-card-text">Điều kiện được làm đồ án tốt nghiệp?</div>
+            </div>
+
+            <div class="prompt-card" data-prompt="Quy định về thời hạn đóng học phí và bảo lưu kết quả học tập tại NTU?">
+              <div class="prompt-card-icon">💳</div>
+              <div class="prompt-card-text">Quy định đóng học phí và bảo lưu kết quả?</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Input Bar (Bottom) -->
+      <footer class="chat-input-wrapper">
+        <!-- Quick Category Pills -->
+        <div class="category-pills" id="category-pills">
+          <button type="button" class="pill-item active" data-topic="all">🎯 Tất cả quy chế</button>
+          <button type="button" class="pill-item" data-topic="scholarship">🎓 Học bổng & Rèn luyện</button>
+          <button type="button" class="pill-item" data-topic="registration">📚 Đăng ký tín chỉ & Học lại</button>
+          <button type="button" class="pill-item" data-topic="warning">⚠️ Cảnh báo học vụ</button>
+          <button type="button" class="pill-item" data-topic="graduation">📜 Tốt nghiệp & Đồ án</button>
+        </div>
+
+        <form class="input-container" id="chat-form">
+          <!-- Mic Voice Button -->
+          <button 
+            type="button" 
+            id="btn-mic" 
+            class="btn-icon btn-mic" 
+            title="Nói câu hỏi của bạn (Multimodal STT)"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+          </button>
+
+          <!-- Auto-expanding Textarea -->
+          <textarea 
+            id="chat-input" 
+            class="chat-textarea" 
+            placeholder="Hỏi về quy chế, học bổng, điểm rèn luyện, đăng ký học phần... (Enter để gửi, Shift+Enter xuống dòng)" 
+            rows="1"
+          ></textarea>
+
+          <!-- Send Message Button -->
+          <button 
+            type="submit" 
+            id="btn-send" 
+            class="btn-icon btn-send" 
+            title="Gửi câu hỏi"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </form>
+        <div class="input-footer">
+          NTU EduBot v2.0 tra cứu trực tiếp theo dữ liệu quy chế học vụ NTU. Mọi thông tin phản hồi đều có trích dẫn nguồn căn cứ pháp lý và click xem nguyên văn.
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <!-- ====================================================================
+       MODAL 1: CITATION PREVIEW MODAL (Click xem nguyên văn Điều/Khoản)
+       ==================================================================== -->
+  <div class="modal-backdrop" id="modal-citation" style="display:none;" aria-hidden="true">
+    <div class="modal-dialog modal-citation-dialog" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-icon">📖</span>
+          <div>
+            <h3 class="modal-title" id="citation-modal-doc-title">Quy chế Đào tạo NTU</h3>
+            <div class="modal-subtitle" id="citation-modal-location">Căn cứ pháp lý trích dẫn</div>
+          </div>
+        </div>
+        <button type="button" class="btn-close-modal" id="btn-close-citation" aria-label="Đóng">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="citation-meta-bar">
+          <span class="meta-tag match-score" id="citation-modal-score">Độ tin cậy: 95.5%</span>
+          <span class="meta-tag file-tag" id="citation-modal-filename">quy_che_dao_tao_ntu.txt</span>
+        </div>
+        <div class="citation-content-box" id="citation-modal-content">
+          <!-- Full regulation content with keyword highlighting -->
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-modal-action btn-copy-action" id="btn-copy-citation">
+          <span>📋 Sao chép trích dẫn</span>
+        </button>
+        <button type="button" class="btn-modal-action btn-dismiss-action" id="btn-dismiss-citation">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       MODAL 2: ACADEMIC GPA & SCHOLARSHIP CALCULATOR (Tiện ích sinh viên)
+       ==================================================================== -->
+  <div class="modal-backdrop" id="modal-gpa-calc" style="display:none;" aria-hidden="true">
+    <div class="modal-dialog modal-calc-dialog" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-icon">🧮</span>
+          <div>
+            <h3 class="modal-title">Công cụ Tính điểm & Xét Học bổng NTU</h3>
+            <div class="modal-subtitle">Đối chiếu tự động theo Quy chế Đào tạo tín chỉ Trường Đại học Nguyễn Trãi</div>
+          </div>
+        </div>
+        <button type="button" class="btn-close-modal" id="btn-close-gpa-calc" aria-label="Đóng">&times;</button>
+      </div>
+
+      <div class="modal-body calc-modal-body">
+        <div class="calc-columns">
+          <!-- Form Inputs -->
+          <div class="calc-form-card">
+            <h4 class="card-heading">📝 Thông tin học kỳ của bạn</h4>
+            
+            <div class="calc-form-group">
+              <label for="input-calc-gpa">Điểm TB học kỳ (ĐTBCHK Thang 4):</label>
+              <input type="number" id="input-calc-gpa" class="calc-input" min="0" max="4.0" step="0.05" value="3.25" placeholder="0.00 - 4.00">
+            </div>
+
+            <div class="calc-form-group">
+              <label for="input-calc-drl">Điểm rèn luyện (Thang 100):</label>
+              <input type="number" id="input-calc-drl" class="calc-input" min="0" max="100" step="1" value="85" placeholder="0 - 100">
+            </div>
+
+            <div class="calc-form-group">
+              <label for="input-calc-credits">Số tín chỉ tích lũy trong kỳ:</label>
+              <input type="number" id="input-calc-credits" class="calc-input" min="0" max="30" step="1" value="16" placeholder="Tối thiểu 15 TC để xét HB">
+            </div>
+
+            <div class="calc-form-group">
+              <label for="select-calc-year">Năm học hiện tại của bạn:</label>
+              <select id="select-calc-year" class="calc-select">
+                <option value="1">Năm thứ nhất (Năm 1)</option>
+                <option value="2" selected>Năm thứ hai (Năm 2)</option>
+                <option value="3">Năm thứ ba (Năm 3)</option>
+                <option value="4">Năm thứ tư (Năm 4 / Năm cuối)</option>
+              </select>
+            </div>
+
+            <div class="calc-checkbox-group">
+              <label class="custom-checkbox">
+                <input type="checkbox" id="check-has-fail">
+                <span class="checkmark"></span>
+                <span>Có môn điểm dưới C (D+, D, F) hoặc thi lại trong kỳ</span>
+              </label>
+            </div>
+
+            <!-- Quick Grade 10 to 4 Converter -->
+            <div class="quick-convert-box">
+              <div class="quick-convert-title">
+                <span>🔄 Quy đổi nhanh Thang 10 ⇄ Thang 4 & Điểm chữ</span>
+              </div>
+              <div class="quick-convert-inputs">
+                <input type="number" id="input-score-10" class="score-10-input" min="0" max="10" step="0.1" value="7.5" placeholder="Điểm hệ 10">
+                <span class="convert-arrow">➔</span>
+                <div class="convert-badge" id="convert-result-badge">Điểm B (3.0) - Loại Khá</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Analysis & Results -->
+          <div class="calc-result-card">
+            <h4 class="card-heading">📊 Kết quả Đối chiếu Quy chế NTU</h4>
+
+            <!-- Scholarship Card -->
+            <div class="result-box scholarship-box" id="scholarship-result-box">
+              <div class="result-badge-row">
+                <span class="result-title">Xét Học bổng KKHT (Điều 12, 13):</span>
+                <span class="badge-status status-good" id="scholarship-badge">Học bổng Giỏi</span>
+              </div>
+              <div class="result-detail" id="scholarship-detail">
+                Đạt tiêu chuẩn học bổng Giỏi - Hỗ trợ 100% học phí của ngành trong kỳ.
+              </div>
+            </div>
+
+            <!-- Warning Card -->
+            <div class="result-box warning-box" id="warning-result-box">
+              <div class="result-badge-row">
+                <span class="result-title">Tình trạng Học vụ (Điều 7):</span>
+                <span class="badge-status status-safe" id="warning-badge">Học lực An toàn</span>
+              </div>
+              <div class="result-detail" id="warning-detail">
+                Điểm TBHK 3.25 trên ngưỡng an toàn. Tiếp tục phát huy kết quả tốt!
+              </div>
+            </div>
+
+            <!-- Reference Table -->
+            <div class="grade-table-wrapper">
+              <div class="grade-table-title">Bảng chuẩn quy đổi Thang điểm NTU (Điều 4)</div>
+              <table class="mini-grade-table">
+                <thead>
+                  <tr><th>Thang 10</th><th>Điểm chữ</th><th>Thang 4</th><th>Xếp loại</th></tr>
+                </thead>
+                <tbody>
+                  <tr id="row-grade-a"><td>8.5 - 10.0</td><td><strong>A</strong></td><td>4.0</td><td>Giỏi / Xuất sắc</td></tr>
+                  <tr id="row-grade-bp"><td>8.0 - 8.4</td><td><strong>B+</strong></td><td>3.5</td><td>Khá giỏi</td></tr>
+                  <tr id="row-grade-b"><td>7.0 - 7.9</td><td><strong>B</strong></td><td>3.0</td><td>Khá</td></tr>
+                  <tr id="row-grade-cp"><td>6.5 - 6.9</td><td><strong>C+</strong></td><td>2.5</td><td>Trung bình khá</td></tr>
+                  <tr id="row-grade-c"><td>5.5 - 6.4</td><td><strong>C</strong></td><td>2.0</td><td>Trung bình</td></tr>
+                  <tr id="row-grade-dp"><td>5.0 - 5.4</td><td><strong>D+</strong></td><td>1.5</td><td>Trung bình yếu</td></tr>
+                  <tr id="row-grade-d"><td>4.0 - 4.9</td><td><strong>D</strong></td><td>1.0</td><td>Đạt</td></tr>
+                  <tr id="row-grade-f"><td>&lt; 4.0</td><td><strong>F</strong></td><td>0.0</td><td>Kém (Học lại)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-modal-action btn-dismiss-action" id="btn-dismiss-gpa-calc">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       MODAL 3: LIVE CAMERA & SMARTPHONE DOCUMENT SCANNER
+       ==================================================================== -->
+  <div class="modal-backdrop" id="modal-camera-scanner" style="display:none;" aria-hidden="true">
+    <div class="modal-dialog modal-scanner-dialog" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-icon">📸</span>
+          <div>
+            <h3 class="modal-title">Live Document Scanner</h3>
+            <div class="modal-subtitle">Căn chỉnh trang văn bản quy chế trong khung A4 để OCR rõ nét nhất</div>
+          </div>
+        </div>
+        <button type="button" class="btn-close-modal" id="btn-close-scanner" aria-label="Đóng">&times;</button>
+      </div>
+
+      <div class="modal-body scanner-modal-body">
+        <!-- Live Video View with Viewfinder & Laser -->
+        <div class="scanner-view-container" id="scanner-view-container">
+          <video id="camera-stream" autoplay playsinline muted></video>
+          <div class="scanner-viewfinder">
+            <div class="viewfinder-corner top-left"></div>
+            <div class="viewfinder-corner top-right"></div>
+            <div class="viewfinder-corner bottom-left"></div>
+            <div class="viewfinder-corner bottom-right"></div>
+            <div class="scanner-laser"></div>
+            <div class="viewfinder-hint">Đặt trang giấy văn bản nằm gọn trong khung A4</div>
+          </div>
+          <canvas id="camera-canvas" style="display:none;"></canvas>
+        </div>
+
+        <!-- Captured Snapshot Preview View (Shown right after capture) -->
+        <div id="scanner-snapshot-view" class="scanner-snapshot-view" style="display:none;">
+          <img id="scanner-snapshot-img" alt="Ảnh chụp tài liệu" class="scanner-snapshot-img">
+          <div class="snapshot-status-bar">
+            <span>✓ Đã chụp khung hình tài liệu rõ nét</span>
+            <button type="button" id="btn-retake-scan" class="btn-retake-scan">🔄 Chụp lại</button>
+          </div>
+        </div>
+
+        <!-- Document Title Input -->
+        <div class="scanner-input-group">
+          <label for="scanner-doc-title">Tên quy chế / tài liệu:</label>
+          <input type="text" id="scanner-doc-title" class="calc-input" placeholder="VD: Quy chế Đào tạo 2026 - Trang 1">
+        </div>
+      </div>
+
+      <div class="modal-footer scanner-modal-footer">
+        <button type="button" id="btn-switch-camera" class="btn-modal-action btn-copy-action" title="Đổi camera Trước / Sau">
+          <span>🔄 Đổi Camera</span>
+        </button>
+        <button type="button" id="btn-capture-scan" class="btn-modal-action btn-capture-action">
+          <span>📸 Chụp & Nhận diện chữ (OCR)</span>
+        </button>
+        <button type="button" id="btn-confirm-upload-scan" class="btn-modal-action btn-dismiss-action" style="display:none;">
+          <span>🚀 Nạp vào Kho Tri thức</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Frontend Scripts -->
+  <script src="/js/api.js"></script>
+  <script src="/js/voice.js"></script>
+  <script src="/js/main.js"></script>
+</body>
+</html>
