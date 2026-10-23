@@ -85,6 +85,7 @@ class SessionMetadata(BaseModel):
         description="Session last updated timestamp",
     )
     message_count: int = Field(default=0, description="Total number of messages in session")
+    student_id: Optional[str] = Field(None, description="Student ID for session ownership (MSSV)")
 
 
 class SessionUpdateRequest(BaseModel):

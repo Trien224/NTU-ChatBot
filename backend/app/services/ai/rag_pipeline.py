@@ -54,6 +54,17 @@ Tại đây, bạn có toàn quyền:
 💡 *Tôi có thể giúp bạn giải đáp thắc mắc học vụ cụ thể nào ngay bây giờ không?*"""
 
 
+GREETING_TEXT = """**Chào bạn!** Tôi là **NTU EduBot** - Trợ lý Học vụ AI của Trường Đại học Nguyễn Trãi (NTU).
+
+Tôi luôn sẵn sàng đồng hành và giải đáp các thắc mắc của bạn về:
+- 🎓 **Học bổng & Khen thưởng**: Tiêu chuẩn xét học bổng Khuyến khích học tập (Xuất sắc, Giỏi, Khá) theo Điều 12 & Điều 13.
+- 📚 **Đăng ký học phần & Tín chỉ**: Số tín chỉ tối thiểu/tối đa mỗi học kỳ chính, điều kiện học cải thiện và học lại.
+- ⚖️ **Quy chế học vụ**: Ngưỡng cảnh báo học vụ, cách tính ĐTBCHK và khung đánh giá điểm rèn luyện (ĐRL).
+- 🏆 **Điều kiện tốt nghiệp**: Chuẩn đầu ra Ngoại ngữ, Tin học và điều kiện nhận đồ án tốt nghiệp.
+
+*Bạn cần tra cứu điều khoản hoặc nội dung quy chế nào hôm nay?*"""
+
+
 def classify_intent(query: str) -> Optional[str]:
     """Lightweight intent classifier for greeting, whoami, and general university introductions."""
     q = query.lower().strip()
@@ -228,7 +239,13 @@ class RAGPipeline:
             if intent == "ntu_intro":
                 sources = await self._get_intro_sources(limit=2)
 
-            reply_text = USER_WHOAMI_TEXT if intent == "whoami" else NTU_INTRO_TEXT
+            if intent == "whoami":
+                reply_text = USER_WHOAMI_TEXT
+            elif intent == "greeting":
+                reply_text = GREETING_TEXT
+            else:
+                reply_text = NTU_INTRO_TEXT
+
             await self.chat_repo.save_message(session_id=session_id, role="user", content=question)
             await self.chat_repo.save_message(session_id=session_id, role="assistant", content=reply_text, sources=sources)
             return ChatResponse(session_id=session_id, answer=reply_text, sources=sources)
@@ -281,7 +298,13 @@ class RAGPipeline:
 
             yield f"event: sources\ndata: {json.dumps(sources, ensure_ascii=False)}\n\n"
 
-            reply_text = USER_WHOAMI_TEXT if intent == "whoami" else NTU_INTRO_TEXT
+            if intent == "whoami":
+                reply_text = USER_WHOAMI_TEXT
+            elif intent == "greeting":
+                reply_text = GREETING_TEXT
+            else:
+                reply_text = NTU_INTRO_TEXT
+
             words = reply_text.split(" ")
             for i, word in enumerate(words):
                 chunk = word if i == len(words) - 1 else word + " "

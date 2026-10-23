@@ -19,16 +19,19 @@
   --text-secondary: #c4c7c5;
   --text-muted: #8e918f;
 
-  /* Accent Colors */
+  /* Accent Colors (Quiet Luxury / Zero-Red) */
   --accent-blue: #1d4ed8;
   --accent-blue-glow: rgba(30, 64, 175, 0.22);
   --accent-cyan: #38bdf8;
   --accent-green: #34d399;
-  --accent-rose: #f43f5e;
+  --accent-champagne: #d4b996;
+  --accent-titan: #2b2d31;
+  --accent-titan-hover: #36393f;
+  --accent-silver: #cbd5e1;
 
   /* Modals */
   --modal-backdrop: rgba(0, 0, 0, 0.72);
-  --modal-bg: #1e1f22;
+  --modal-bg: #18191c;
 
   /* Transitions */
   --transition-fast: 0.15s ease;
@@ -80,10 +83,10 @@ html, body {
 }
 
 /* ==========================================================================
-   SIDEBAR (Gemini-style Left Rail - 260px, No Dividing Borders)
+   SIDEBAR (Gemini-style Left Rail - 268px, Smooth Mini-Rail Collapse)
    ========================================================================== */
 .sidebar {
-  width: 260px;
+  width: 268px;
   height: 100vh;
   background-color: var(--bg-sidebar);
   display: flex;
@@ -92,7 +95,7 @@ html, body {
   border: none;
   z-index: 100;
   flex-shrink: 0;
-  transition: transform var(--transition-normal);
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), padding 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform var(--transition-normal);
 }
 
 .sidebar-top {
@@ -343,7 +346,7 @@ html, body {
 }
 
 .status-dot.offline {
-  background: var(--accent-rose);
+  background: #64748b;
 }
 
 /* ==========================================================================
@@ -603,8 +606,8 @@ html, body {
 
 .btn-plus.open {
   transform: rotate(45deg);
-  background-color: rgba(244, 63, 94, 0.2);
-  color: var(--accent-rose);
+  background-color: rgba(212, 185, 150, 0.18);
+  color: var(--accent-champagne);
 }
 
 /* Popover Multimodal Upload Menu */
@@ -730,14 +733,14 @@ html, body {
 }
 
 .btn-mic.recording {
-  background-color: rgba(244, 63, 94, 0.2);
-  color: var(--accent-rose);
+  background-color: rgba(212, 185, 150, 0.18);
+  color: var(--accent-champagne);
   animation: pulseMic 1.2s infinite;
 }
 
 @keyframes pulseMic {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4); }
-  50% { box-shadow: 0 0 0 8px rgba(244, 63, 94, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(212, 185, 150, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(212, 185, 150, 0); }
 }
 
 .btn-send {
@@ -847,7 +850,7 @@ html, body {
 }
 
 .btn-attachment-cancel:hover {
-  color: var(--accent-rose);
+  color: #f1f5f9;
 }
 
 /* ==========================================================================
@@ -1410,8 +1413,8 @@ html, body {
 }
 
 .btn-delete-doc:hover {
-  color: var(--accent-rose);
-  background: rgba(244, 63, 94, 0.15);
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* GPA Calculator Specifics */
@@ -1540,8 +1543,9 @@ html, body {
 }
 
 .status-danger {
-  background: rgba(244, 63, 94, 0.2);
-  color: #fb7185;
+  background: rgba(212, 185, 150, 0.15);
+  color: var(--accent-champagne);
+  border: 1px solid rgba(212, 185, 150, 0.35);
 }
 
 .status-none {
@@ -1710,7 +1714,7 @@ html, body {
 }
 
 .toast.success { border-left: 3px solid var(--accent-green); }
-.toast.error { border-left: 3px solid var(--accent-rose); }
+.toast.error { border-left: 3px solid var(--accent-champagne); }
 .toast.info { border-left: 3px solid var(--accent-cyan); }
 
 @keyframes slideInToast {
@@ -1745,5 +1749,543 @@ html, body {
 
   .main-chat.home-mode .gemini-greeting {
     font-size: 1.75rem;
+  }
+}
+
+/* ==========================================================================
+   NEW COMPONENTS: Sidebar Search Bar
+   ========================================================================== */
+.sidebar-search-bar {
+  padding: 0 4px 10px 4px;
+  animation: fadeIn 0.2s ease;
+}
+
+.sidebar-search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 7px 12px;
+  transition: border-color var(--transition-fast);
+}
+
+.sidebar-search-input-wrap:focus-within {
+  border-color: var(--border-focus);
+}
+
+.sidebar-search-input-wrap svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.search-sessions-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 0.83rem;
+  color: var(--text-primary);
+}
+
+.search-sessions-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   RAG Mode Dropdown
+   ========================================================================== */
+.rag-mode-dropdown {
+  position: absolute;
+  bottom: 52px;
+  right: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+  z-index: 200;
+  min-width: 230px;
+  backdrop-filter: blur(8px);
+  animation: slideUpFade 0.15s ease;
+}
+
+@keyframes slideUpFade {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.rag-mode-item {
+  width: 100%;
+  padding: 11px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rag-mode-item:hover {
+  background: var(--bg-surface-hover);
+}
+
+.rag-mode-item.active-mode {
+  background: rgba(30, 78, 216, 0.15);
+  color: var(--accent-cyan);
+}
+
+/* ==========================================================================
+   Custom Modals: Titanium Slate Action Buttons (Zero-Red Quiet Luxury)
+   ========================================================================== */
+.btn-titan-action,
+.btn-danger-action {
+  background-color: #2b2d31;
+  color: #f1f5f9;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  border-radius: 10px;
+  padding: 8px 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast), color var(--transition-fast);
+}
+
+.btn-titan-action:hover,
+.btn-danger-action:hover {
+  background-color: #36393f;
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.btn-titan-action:active,
+.btn-danger-action:active {
+  transform: translateY(0);
+}
+
+/* ==========================================================================
+   Confirm Delete Modal Styles (Quiet Luxury - Zero Red)
+   ========================================================================== */
+.modal-confirm-dialog {
+  max-width: 420px;
+  border-radius: 18px;
+  backdrop-filter: blur(16px);
+  background: #18191c;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+
+.modal-icon-champagne {
+  color: var(--accent-champagne);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-icon-danger {
+  color: var(--accent-champagne);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.confirm-delete-preview {
+  background: #202124;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.confirm-session-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+}
+
+.confirm-session-icon {
+  color: #9aa0a6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.confirm-session-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  word-break: break-all;
+}
+
+.confirm-delete-warn {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ==========================================================================
+   Maintenance Notice Card (Quiet Luxury Muted Obsidian)
+   ========================================================================== */
+.maintenance-notice-card {
+  background: #18191c;
+  border-left: 3px solid var(--accent-champagne);
+  border-radius: 10px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #f1f5f9;
+  backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.maintenance-notice-card .notice-icon {
+  color: var(--accent-champagne);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.maintenance-notice-card .notice-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent-champagne);
+  margin-bottom: 3px;
+  letter-spacing: 0.4px;
+}
+
+.maintenance-notice-card .notice-body {
+  font-size: 0.88rem;
+  color: #e2e8f0;
+  line-height: 1.45;
+}
+
+/* ==========================================================================
+   View Document Content Modal
+   ========================================================================== */
+.modal-doc-content-dialog {
+  max-width: 700px;
+  max-height: 88vh;
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-content-scroll-box {
+  max-height: 55vh;
+  overflow-y: auto;
+  background: var(--bg-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 16px;
+  font-size: 0.83rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  font-family: 'Inter', monospace;
+}
+
+.doc-content-loading {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 20px;
+}
+
+/* ==========================================================================
+   Student Settings Modal & Privacy Zone
+   ========================================================================== */
+.modal-settings-dialog {
+  max-width: 480px;
+  border-radius: 18px;
+}
+
+.settings-section {
+  margin-bottom: 22px;
+}
+
+.settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.settings-section-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+}
+
+.settings-field-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.settings-input {
+  flex: 1;
+}
+
+.settings-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 7px;
+  line-height: 1.5;
+}
+
+.settings-privacy-zone {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.settings-privacy-zone .settings-section-title {
+  color: var(--accent-silver);
+  border-bottom-color: rgba(255, 255, 255, 0.09);
+}
+
+.settings-danger-zone {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.settings-danger-zone .settings-section-title {
+  color: var(--accent-silver);
+  border-bottom-color: rgba(255, 255, 255, 0.09);
+}
+
+/* Range Slider */
+.range-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-surface-hover);
+  outline: none;
+}
+
+.range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+  box-shadow: 0 2px 8px rgba(56, 189, 248, 0.4);
+}
+
+.range-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.range-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-cyan);
+  min-width: 36px;
+  text-align: right;
+}
+
+/* ==========================================================================
+   Document Library: Student doc actions
+   ========================================================================== */
+.doc-item-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.btn-doc-action {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.btn-doc-action:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-focus);
+}
+
+.btn-doc-action.btn-doc-delete:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f5f9;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.doc-item-system-badge {
+  font-size: 0.7rem;
+  background: rgba(30, 78, 216, 0.15);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(30, 78, 216, 0.3);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   MINI-RAIL SIDEBAR COLLAPSED STATE (Desktop 68px - Smooth Tab In / Out)
+   ========================================================================== */
+@media (min-width: 769px) {
+  .sidebar.collapsed {
+    width: 68px;
+    padding: 14px 10px 14px 10px;
+    align-items: center;
+    overflow: visible;
+  }
+
+  /* Hide titles, text labels, and scrollable lists */
+  .sidebar.collapsed .sidebar-brand-title,
+  .sidebar.collapsed .nav-text,
+  .sidebar.collapsed .sidebar-section-header,
+  .sidebar.collapsed .sidebar-search-bar,
+  .sidebar.collapsed .sessions-scrollable-container,
+  .sidebar.collapsed #status-text {
+    display: none !important;
+  }
+
+  /* Top Section */
+  .sidebar.collapsed .sidebar-top {
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    align-items: center;
+    padding: 0;
+    margin-bottom: 14px;
+  }
+
+  .sidebar.collapsed .sidebar-top-left {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .sidebar.collapsed #btn-toggle-sidebar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+  }
+
+  .sidebar.collapsed #btn-sidebar-search {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+  }
+
+  /* Nav Group Icons (42px x 42px round buttons) */
+  .sidebar.collapsed .sidebar-nav-group {
+    width: 100%;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: auto;
+  }
+
+  .sidebar.collapsed .sidebar-nav-item {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .sidebar.collapsed .sidebar-nav-item .nav-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    font-size: 1.1rem;
+  }
+
+  /* Bottom Footer */
+  .sidebar.collapsed .sidebar-footer {
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0 0 0;
+    width: 100%;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .sidebar.collapsed .health-indicator {
+    justify-content: center;
+    padding: 0;
+    width: 42px;
+    height: 24px;
+    cursor: default;
+  }
+
+  .sidebar.collapsed #btn-sidebar-settings {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+  }
+
+  /* Floating Tooltips (Quiet Luxury / Muted Obsidian) */
+  .sidebar.collapsed [data-tooltip] {
+    position: relative;
+  }
+
+  .sidebar.collapsed [data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: calc(100% + 14px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: #18191c;
+    color: #f1f5f9;
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.55);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 9999;
+    backdrop-filter: blur(16px);
+    animation: tooltipSlideIn 0.15s ease-out;
+  }
+
+  @keyframes tooltipSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-50%) translateX(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(-50%) translateX(0);
+    }
   }
 }

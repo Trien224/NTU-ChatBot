@@ -30,6 +30,7 @@ class ChatRepository:
         role: str,
         content: str,
         sources: Optional[List[Dict[str, Any]]] = None,
+        student_id: Optional[str] = None,
     ) -> bool:
         """Save a new chat message to the history collection and update session metadata.
 
@@ -38,6 +39,7 @@ class ChatRepository:
             role: Originator role ('user' or 'assistant').
             content: The text message content.
             sources: Optional list of retrieved citations and references.
+            student_id: Optional student identifier for session ownership tracking.
 
         Returns:
             bool: True if inserted successfully, False otherwise.
@@ -59,6 +61,8 @@ class ChatRepository:
             if not suggested_title:
                 suggested_title = "Cuộc trò chuyện mới"
 
+            clean_student_id = student_id.strip() if student_id and student_id.strip() else None
+
             existing_session = await self.sessions_collection.find_one({"session_id": session_id})
             if not existing_session:
                 await self.sessions_collection.insert_one({
@@ -68,12 +72,16 @@ class ChatRepository:
                     "created_at": now,
                     "updated_at": now,
                     "message_count": 1,
+                    "student_id": clean_student_id,
                 })
             else:
                 update_fields = {"updated_at": now}
                 # If existing title is still generic and user sends a question, update title
                 if existing_session.get("title") in ("Cuộc trò chuyện mới", "Tư vấn Học vụ NTU") and role == "user":
                     update_fields["title"] = suggested_title
+                # Persist student_id if not already set
+                if clean_student_id and not existing_session.get("student_id"):
+                    update_fields["student_id"] = clean_student_id
 
                 await self.sessions_collection.update_one(
                     {"session_id": session_id},
@@ -111,16 +119,22 @@ class ChatRepository:
             logger.error("Failed to get chat history for session %s: %s", session_id, exc, exc_info=True)
             return []
 
-    async def list_sessions(self, limit: int = 50) -> List[SessionMetadata]:
+    async def list_sessions(self, limit: int = 50, student_id: Optional[str] = None) -> List[SessionMetadata]:
         """List all chat sessions, with pinned sessions prioritized first, then sorted by updated_at desc.
 
         Args:
             limit: Maximum number of sessions to return.
+            student_id: If provided, only return sessions belonging to this student.
 
         Returns:
             List[SessionMetadata]: Sessions with metadata.
         """
         try:
+            # Build base query filter
+            query_filter = {}
+            if student_id and student_id.strip():
+                query_filter["student_id"] = student_id.strip()
+
             # First backfill any session IDs found in chat_histories that lack a chat_sessions record
             distinct_session_ids = await self.collection.distinct("session_id")
             for sid in distinct_session_ids:
@@ -146,11 +160,12 @@ class ChatRepository:
                         "created_at": created_at,
                         "updated_at": created_at,
                         "message_count": count,
+                        "student_id": None,
                     })
 
             # Fetch sorted sessions: pinned first (is_pinned: True -> 1), then updated_at descending
             cursor = (
-                self.sessions_collection.find({}, {"_id": 0})
+                self.sessions_collection.find(query_filter, {"_id": 0})
                 .sort([("is_pinned", -1), ("updated_at", -1)])
                 .limit(limit)
             )
@@ -228,3 +243,33 @@ class ChatRepository:
         except Exception as exc:
             logger.error("Failed to clear chat history for session %s: %s", session_id, exc, exc_info=True)
             return False
+
+    async def clear_all_sessions(self, student_id: Optional[str] = None) -> int:
+        """Remove all chat sessions and their messages, optionally filtered by student_id.
+
+        Args:
+            student_id: Optional student identifier to only clear their conversations.
+
+        Returns:
+            int: Number of deleted sessions.
+        """
+        try:
+            filter_query: Dict[str, Any] = {}
+            if student_id and student_id.strip():
+                filter_query["student_id"] = student_id.strip()
+                cursor = self.sessions_collection.find(filter_query, {"session_id": 1})
+                session_docs = await cursor.to_list(length=1000)
+                sids = [doc["session_id"] for doc in session_docs if "session_id" in doc]
+                if sids:
+                    await self.collection.delete_many({"session_id": {"$in": sids}})
+                    res = await self.sessions_collection.delete_many(filter_query)
+                    return res.deleted_count
+                return 0
+
+            # Clear all
+            res = await self.sessions_collection.delete_many({})
+            await self.collection.delete_many({})
+            return res.deleted_count
+        except Exception as exc:
+            logger.error("Failed to clear all sessions: %s", exc, exc_info=True)
+            return 0

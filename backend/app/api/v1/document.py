@@ -1,4 +1,9 @@
-"""Document management API endpoints for ingesting, listing, and removing regulation documents."""
+"""Document management API endpoints for ingesting, listing, and removing regulation documents.
+
+Access Control:
+- NTU system document (doc_id == 'ntu_quy_che_2026') is read-only and cannot be deleted.
+- Student-uploaded documents are tagged with student_id and support View/Rename/Delete.
+"""
 import logging
 import uuid
 from pathlib import Path
@@ -19,6 +24,10 @@ router = APIRouter()
 vector_repo = VectorRepository()
 text_splitter = RegExTextSplitter(chunk_size=800, chunk_overlap=100)
 
+# System-protected document ID (NTU official regulation - cannot be deleted by students)
+NTU_PROTECTED_DOC_ID = "ntu_quy_che_2026"
+NTU_PROTECTED_FILENAME = "quy_che_dao_tao_ntu.txt"
+
 
 @router.post(
     "/upload",
@@ -29,12 +38,14 @@ text_splitter = RegExTextSplitter(chunk_size=800, chunk_overlap=100)
 async def upload_document(
     file: UploadFile = File(..., description="Tệp tài liệu quy chế (.pdf, .txt, .png, .jpg, .jpeg, .webp, .mp4, .webm, .mp3, .wav)"),
     title: Optional[str] = Form(None, description="Tiêu đề gợi nhớ của quy chế (ví dụ: 'Quy chế Đào tạo 2026')"),
+    student_id: Optional[str] = Form(None, description="Mã số sinh viên (MSSV) của người nạp tài liệu (tùy chọn)"),
 ) -> UploadResponse:
     """Ingest a new regulation document into the RAG vector knowledge base.
 
     Args:
         file: Uploaded file handle.
         title: Optional document title.
+        student_id: Optional student ID for ownership tracking.
 
     Returns:
         UploadResponse: Ingestion metrics including assigned doc_id and total chunk count.
@@ -55,6 +66,7 @@ async def upload_document(
     temp_path: Optional[Path] = None
     doc_id = f"doc_{uuid.uuid4().hex[:10]}"
     doc_title = title.strip() if title and title.strip() else Path(file.filename).stem
+    clean_student_id = student_id.strip() if student_id and student_id.strip() else None
 
     try:
         # Step 1: Save file securely to temporary storage
@@ -132,15 +144,20 @@ async def upload_document(
         for chunk, emb in zip(chunks, embeddings):
             chunk.embedding = emb
             chunk_dict = chunk.model_dump()
+            # Tag student_id in chunk metadata if provided
+            if clean_student_id:
+                chunk_dict.setdefault("metadata", {})
+                chunk_dict["metadata"]["student_id"] = clean_student_id
             chunk_documents.append(chunk_dict)
 
         # Step 5: Persist chunks and vectors to MongoDB Atlas
         inserted_count = await vector_repo.insert_chunks(chunk_documents)
 
         logger.info(
-            "Successfully ingested document '%s' (doc_id=%s) with %d chunks into MongoDB Atlas",
+            "Successfully ingested document '%s' (doc_id=%s, student_id=%s) with %d chunks into MongoDB Atlas",
             file.filename,
             doc_id,
+            clean_student_id or "system",
             inserted_count,
         )
 
@@ -150,7 +167,11 @@ async def upload_document(
             doc_id=doc_id,
             filename=file.filename,
             total_chunks=inserted_count,
-            extra_info={"title": doc_title, "char_count": len(extracted_text)},
+            extra_info={
+                "title": doc_title,
+                "char_count": len(extracted_text),
+                "student_id": clean_student_id,
+            },
         )
 
     except HTTPException:
@@ -176,6 +197,7 @@ async def upload_document(
 async def scan_camera_document(
     file: UploadFile = File(..., description="Ảnh chụp từ Camera (.png, .jpg, .jpeg, .webp)"),
     title: Optional[str] = Form(None, description="Tiêu đề gợi nhớ của quy chế"),
+    student_id: Optional[str] = Form(None, description="Mã số sinh viên (MSSV)"),
 ) -> UploadResponse:
     """Ingest a camera-scanned document into MongoDB vector repository.
 
@@ -199,6 +221,7 @@ async def scan_camera_document(
     processed_path: Optional[Path] = None
     doc_id = f"doc_{uuid.uuid4().hex[:10]}"
     doc_title = title.strip() if title and title.strip() else f"Tài liệu Scan Camera - {Path(file.filename).stem}"
+    clean_student_id = student_id.strip() if student_id and student_id.strip() else None
 
     try:
         # Step 1: Save uploaded raw camera image
@@ -250,7 +273,11 @@ async def scan_camera_document(
         chunk_documents: List[Dict[str, Any]] = []
         for chunk, emb in zip(chunks, embeddings):
             chunk.embedding = emb
-            chunk_documents.append(chunk.model_dump())
+            chunk_dict = chunk.model_dump()
+            if clean_student_id:
+                chunk_dict.setdefault("metadata", {})
+                chunk_dict["metadata"]["student_id"] = clean_student_id
+            chunk_documents.append(chunk_dict)
 
         inserted_count = await vector_repo.insert_chunks(chunk_documents)
         logger.info("Successfully ingested camera document '%s' (doc_id=%s) with %d chunks into MongoDB", file.filename, doc_id, inserted_count)
@@ -261,7 +288,7 @@ async def scan_camera_document(
             doc_id=doc_id,
             filename=file.filename,
             total_chunks=inserted_count,
-            extra_info={"title": doc_title, "char_count": len(extracted_text)},
+            extra_info={"title": doc_title, "char_count": len(extracted_text), "student_id": clean_student_id},
         )
 
     except HTTPException:
@@ -282,10 +309,13 @@ async def scan_camera_document(
 @router.get(
     "/list",
     summary="Danh sách các tài liệu quy chế đã nạp",
-    description="Truy vấn danh mục tài liệu quy chế đang được lưu trữ trong cơ sở tri thức vector.",
+    description="Truy vấn danh mục tài liệu quy chế đang được lưu trữ trong cơ sở tri thức vector. Tài liệu hệ thống NTU được đánh dấu riêng.",
 )
-async def list_documents() -> List[Dict[str, Any]]:
+async def list_documents(student_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Retrieve list of ingested documents grouped by unique document identifier.
+
+    Args:
+        student_id: If provided, only returns student's own documents (excluding NTU system docs).
 
     Returns:
         List[Dict[str, Any]]: Aggregated documents with title, filename, date, and chunk count.
@@ -299,6 +329,7 @@ async def list_documents() -> List[Dict[str, Any]]:
                     "title": {"$first": "$metadata.title"},
                     "created_at": {"$first": "$metadata.created_at"},
                     "total_chunks": {"$sum": 1},
+                    "student_id": {"$first": "$metadata.student_id"},
                 }
             },
             {"$sort": {"created_at": -1}},
@@ -310,12 +341,33 @@ async def list_documents() -> List[Dict[str, Any]]:
                     "title": 1,
                     "created_at": 1,
                     "total_chunks": 1,
+                    "student_id": 1,
                 }
             },
         ]
 
         cursor = vector_repo.collection.aggregate(pipeline)
         documents = await cursor.to_list(length=100)
+
+        # Tag each document with whether it's the NTU system document
+        for doc in documents:
+            doc["is_system_doc"] = (
+                doc.get("doc_id") == NTU_PROTECTED_DOC_ID
+                or doc.get("filename") == NTU_PROTECTED_FILENAME
+            )
+
+        # If student_id filter is provided, return only student's own documents (not system docs)
+        if student_id and student_id.strip():
+            sid = student_id.strip()
+            documents = [
+                doc for doc in documents
+                if not doc.get("is_system_doc") and doc.get("student_id") == sid
+            ]
+        else:
+            # Default: exclude system docs from editable list (return all for admin view)
+            # Keep is_system_doc flag so frontend can decide visibility
+            pass
+
         return documents
     except Exception as exc:
         logger.error("Error listing documents: %s", exc, exc_info=True)
@@ -325,13 +377,134 @@ async def list_documents() -> List[Dict[str, Any]]:
         ) from exc
 
 
+@router.get(
+    "/{doc_id}/detail",
+    summary="Xem toàn bộ nội dung tài liệu sinh viên đã nạp",
+    description="Trả về toàn bộ nội dung văn bản đã trích xuất của tài liệu (ghép các chunks lại). Không áp dụng cho tài liệu hệ thống NTU.",
+)
+async def get_document_detail(doc_id: str) -> Dict[str, Any]:
+    """Retrieve full extracted text content of a student-uploaded document.
+
+    Args:
+        doc_id: Unique document identifier.
+
+    Returns:
+        Dict[str, Any]: Document metadata and concatenated text content.
+    """
+    # Block access to NTU system document detail
+    if doc_id == NTU_PROTECTED_DOC_ID:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài liệu quy chế gốc của Nhà trường không thể xem chi tiết qua API này.",
+        )
+
+    try:
+        # Fetch all chunks for this doc_id, sorted by chunk index
+        cursor = vector_repo.collection.find(
+            {"metadata.doc_id": doc_id},
+            {"_id": 0, "text": 1, "metadata": 1},
+        ).sort("metadata.chunk_index", 1)
+
+        chunks = await cursor.to_list(length=500)
+
+        if not chunks:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy tài liệu với mã doc_id='{doc_id}'.",
+            )
+
+        # Gather metadata from first chunk
+        first_meta = chunks[0].get("metadata", {})
+        full_text = "\n\n".join(c.get("text", "") for c in chunks if c.get("text"))
+
+        return {
+            "doc_id": doc_id,
+            "title": first_meta.get("title", ""),
+            "filename": first_meta.get("filename", ""),
+            "student_id": first_meta.get("student_id"),
+            "total_chunks": len(chunks),
+            "content": full_text,
+            "char_count": len(full_text),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Error fetching document detail for %s: %s", doc_id, exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi lấy chi tiết tài liệu: {str(exc)}",
+        ) from exc
+
+
+@router.patch(
+    "/{doc_id}",
+    summary="Sửa tên tiêu đề tài liệu sinh viên đã nạp",
+    description="Cập nhật tên tiêu đề hiển thị cho tài liệu. Chỉ áp dụng cho tài liệu do sinh viên tự nạp, không áp dụng cho tài liệu hệ thống NTU.",
+)
+async def update_document_title(doc_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    """Update the display title of a student-uploaded document.
+
+    Args:
+        doc_id: Target document identifier.
+        body: JSON body containing 'title' field.
+
+    Returns:
+        Dict[str, Any]: Update confirmation.
+    """
+    # Block update on NTU system document
+    if doc_id == NTU_PROTECTED_DOC_ID:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài liệu quy chế gốc của Nhà trường không thể chỉnh sửa.",
+        )
+
+    new_title = (body.get("title") or "").strip()
+    if not new_title:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tiêu đề mới không được để trống.",
+        )
+
+    try:
+        result = await vector_repo.collection.update_many(
+            {"metadata.doc_id": doc_id},
+            {"$set": {"metadata.title": new_title}},
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy tài liệu với mã doc_id='{doc_id}'.",
+            )
+
+        logger.info("Updated title for doc_id=%s to '%s' (%d chunks updated)", doc_id, new_title, result.modified_count)
+
+        return {
+            "status": "success",
+            "message": f"Đã cập nhật tiêu đề tài liệu thành công.",
+            "doc_id": doc_id,
+            "new_title": new_title,
+            "updated_chunks": result.modified_count,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Error updating document title for %s: %s", doc_id, exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi cập nhật tiêu đề tài liệu: {str(exc)}",
+        ) from exc
+
+
 @router.delete(
     "/{doc_id}",
     summary="Xóa tài liệu quy chế khỏi cơ sở tri thức",
-    description="Xóa toàn bộ các vector chunks thuộc về tài liệu theo mã doc_id.",
+    description="Xóa toàn bộ các vector chunks thuộc về tài liệu theo mã doc_id. Tài liệu hệ thống NTU được bảo vệ khỏi lệnh xóa.",
 )
 async def delete_document(doc_id: str) -> Dict[str, Any]:
     """Delete all vector chunks associated with the specified document ID.
+
+    NTU system document (ntu_quy_che_2026) is protected and returns 403 Forbidden.
 
     Args:
         doc_id: Unique document identifier to remove.
@@ -339,6 +512,13 @@ async def delete_document(doc_id: str) -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: Deletion confirmation and count of deleted chunks.
     """
+    # Block deletion of NTU system document
+    if doc_id == NTU_PROTECTED_DOC_ID:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài liệu quy chế gốc của Nhà trường (ntu_quy_che_2026) được bảo vệ và không thể xóa.",
+        )
+
     try:
         deleted_count = await vector_repo.delete_by_doc_id(doc_id)
         if deleted_count == 0:

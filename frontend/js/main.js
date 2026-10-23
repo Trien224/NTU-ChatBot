@@ -16,12 +16,21 @@ document.addEventListener("DOMContentLoaded", () => {
     selectedCameraFile: null,
     selectedAttachmentFile: null,
     renamingSessionId: null,
+    deletingSessionId: null,
+    deletingSessionName: "",
+    renamingDocId: null,
     sessionsList: [],
+    allSessionsList: [],
     cameraFacingMode: "environment",
     mediaStream: null,
     capturedBlob: null,
     currentQuestion: "",
     activeCitation: null,
+    studentId: localStorage.getItem("ntu_student_id") || "",
+    ragMode: "detail",
+    filterMode: "all",
+    searchQuery: "",
+    ttsSpeed: parseFloat(localStorage.getItem("ntu_tts_speed") || "1.0"),
   };
 
   // DOM Elements Mapping
@@ -156,6 +165,47 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Toast Notifications
     toastContainer: document.getElementById("toast-container"),
+
+    // New Modal 6: Confirm Delete History
+    modalConfirmDelete: document.getElementById("modal-confirm-delete"),
+    confirmDeleteSessionName: document.getElementById("confirm-delete-session-name"),
+    btnCancelDeleteHistory: document.getElementById("btn-cancel-delete-history"),
+    btnConfirmDeleteHistory: document.getElementById("btn-confirm-delete-history"),
+
+    // New Modal 7: View Document Content
+    modalDocContent: document.getElementById("modal-doc-content"),
+    docContentModalTitle: document.getElementById("doc-content-modal-title"),
+    docContentModalMeta: document.getElementById("doc-content-modal-meta"),
+    docContentTextBox: document.getElementById("doc-content-text-box"),
+    btnCloseDocContent: document.getElementById("btn-close-doc-content"),
+    btnCloseDocContentFooter: document.getElementById("btn-close-doc-content-footer"),
+
+    // New Modal 8: Student Settings
+    modalStudentSettings: document.getElementById("modal-student-settings"),
+    btnCloseStudentSettings: document.getElementById("btn-close-student-settings"),
+    btnCloseSettingsFooter: document.getElementById("btn-close-settings-footer"),
+    inputStudentMssv: document.getElementById("input-student-mssv"),
+    btnSaveMssv: document.getElementById("btn-save-mssv"),
+    rangeTtsSpeed: document.getElementById("range-tts-speed"),
+    ttsSpeedLabel: document.getElementById("tts-speed-label"),
+    btnClearAllHistory: document.getElementById("btn-clear-all-history"),
+
+    // New Modal 9: Rename Doc
+    modalRenameDoc: document.getElementById("modal-rename-doc"),
+    btnCloseRenameDoc: document.getElementById("btn-close-rename-doc"),
+    btnCancelRenameDoc: document.getElementById("btn-cancel-rename-doc"),
+    btnConfirmRenameDoc: document.getElementById("btn-confirm-rename-doc"),
+    inputDocRename: document.getElementById("input-doc-rename"),
+
+    // Sidebar search & filter
+    btnSidebarSearch: document.getElementById("btn-sidebar-search"),
+    sidebarSearchBar: document.getElementById("sidebar-search-bar"),
+    inputSearchSessions: document.getElementById("input-search-sessions"),
+    btnFilterSessions: document.getElementById("btn-filter-sessions"),
+
+    // RAG mode dropdown
+    btnRagMode: document.getElementById("btn-rag-mode"),
+    ragModeDropdown: document.getElementById("rag-mode-dropdown"),
   };
 
   // Initialize Application
@@ -174,7 +224,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // 4. Check Backend Health
     refreshHealthStatus();
 
-    // 5. Load Chat Sessions list into Sidebar
+    // 5. Load Chat Sessions list into Sidebar (filtered by student_id if set)
     loadSessionsList();
 
     // 6. Preload Ingested Documents into Vector Catalog
@@ -183,6 +233,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // 7. Initialize GPA Calculator values
     calculateGpaAndScholarship();
     convertScore10();
+
+    // 8. Initialize student settings from localStorage
+    initStudentSettings();
   }
 
   // =========================================================================
@@ -276,8 +329,11 @@ document.addEventListener("DOMContentLoaded", () => {
   function setupEventListeners() {
     // 1. Sidebar Toggle (Desktop & Mobile)
     const toggleSidebar = () => {
-      if (elements.sidebar) {
+      if (!elements.sidebar) return;
+      if (window.innerWidth <= 768) {
         elements.sidebar.classList.toggle("open");
+      } else {
+        elements.sidebar.classList.toggle("collapsed");
       }
     };
     if (elements.btnToggleSidebar) elements.btnToggleSidebar.addEventListener("click", toggleSidebar);
@@ -422,6 +478,105 @@ document.addEventListener("DOMContentLoaded", () => {
     setupCameraScannerEvents();
     setupRenameSessionModalEvents();
     setupDocsLibraryModalEvents();
+    setupConfirmDeleteModalEvents();
+    setupDocContentModalEvents();
+    setupStudentSettingsModalEvents();
+    setupDocRenameModalEvents();
+
+    // 16. Sidebar Search Icon
+    if (elements.btnSidebarSearch) {
+      elements.btnSidebarSearch.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (elements.sidebar && elements.sidebar.classList.contains("collapsed")) {
+          elements.sidebar.classList.remove("collapsed");
+        }
+        const bar = elements.sidebarSearchBar;
+        if (bar) {
+          bar.style.display = "block";
+          if (elements.inputSearchSessions) {
+            setTimeout(() => elements.inputSearchSessions.focus(), 60);
+          }
+        }
+      });
+    }
+
+    // 17. Sidebar Search Input - Real-time filter
+    if (elements.inputSearchSessions) {
+      elements.inputSearchSessions.addEventListener("input", (e) => {
+        state.searchQuery = e.target.value.trim().toLowerCase();
+        renderSessionsFromState();
+      });
+    }
+
+    // 18. Filter Sessions (Tất cả / Chỉ ghim)
+    if (elements.btnFilterSessions) {
+      elements.btnFilterSessions.addEventListener("click", (e) => {
+        e.stopPropagation();
+        state.filterMode = state.filterMode === "all" ? "pinned" : "all";
+        elements.btnFilterSessions.innerHTML = state.filterMode === "pinned"
+          ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>`
+          : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>`;
+        elements.btnFilterSessions.title = state.filterMode === "pinned"
+          ? "Đang lọc: Chỉ ghim - Bấm để xem tất cả"
+          : "Lọc: Tất cả / Chỉ ghim";
+        showToast(
+          state.filterMode === "pinned" ? "Đang hiện các hội thoại đã ghim." : "Hiện tất cả hội thoại.",
+          "info",
+          1800
+        );
+        renderSessionsFromState();
+      });
+    }
+
+    // 19. Sidebar Settings Gear → Open Student Settings Modal
+    if (elements.btnSidebarSettings) {
+      elements.btnSidebarSettings.addEventListener("click", () => {
+        openStudentSettingsModal();
+      });
+    }
+
+    // 20. RAG Mode Badge Button → Open/close dropdown
+    if (elements.btnRagMode && elements.ragModeDropdown) {
+      elements.btnRagMode.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const isOpen = elements.ragModeDropdown.style.display === "block";
+        elements.ragModeDropdown.style.display = isOpen ? "none" : "block";
+      });
+
+      // Close on outside click
+      document.addEventListener("click", (e) => {
+        if (
+          elements.ragModeDropdown &&
+          elements.ragModeDropdown.style.display === "block" &&
+          !elements.ragModeDropdown.contains(e.target) &&
+          !elements.btnRagMode.contains(e.target)
+        ) {
+          elements.ragModeDropdown.style.display = "none";
+        }
+      });
+
+      // RAG mode items
+      elements.ragModeDropdown.querySelectorAll(".rag-mode-item").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const mode = btn.getAttribute("data-mode");
+          state.ragMode = mode;
+          elements.ragModeDropdown.querySelectorAll(".rag-mode-item").forEach((b) => b.classList.remove("active-mode"));
+          btn.classList.add("active-mode");
+          elements.ragModeDropdown.style.display = "none";
+          const modeLabel = mode === "fast" ? "⚡ Trả lời nhanh" : "📖 Phân tích chi tiết";
+          if (elements.btnRagMode) {
+            elements.btnRagMode.innerHTML = `${modeLabel} <span>⌄</span>`;
+          }
+          showToast(
+            mode === "fast"
+              ? "Chế độ: Trả lời nhanh súc tích đã bật."
+              : "Chế độ: Phân tích chi tiết kèm điều khoản đã bật.",
+            "info",
+            2000
+          );
+        });
+      });
+    }
 
     // 16. Global Keyboard Shortcuts
     document.addEventListener("keydown", (e) => {
@@ -437,13 +592,15 @@ document.addEventListener("DOMContentLoaded", () => {
       // Esc: Close any popovers or modals
       if (e.key === "Escape") {
         closeGeminiUploadMenu();
+        if (elements.ragModeDropdown) elements.ragModeDropdown.style.display = "none";
       }
     });
-  }
+  } // end setupEventListeners
 
   // =========================================================================
   // Gemini Omnibox: Plus Button & Popover Menu Events
   // =========================================================================
+
   function setupGeminiOmniboxMenuEvents() {
     if (!elements.btnPlusMenu || !elements.geminiUploadMenu) return;
 
@@ -636,7 +793,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       showToast(`Đang phân tích và nạp tệp "${file.name}" vào cơ sở tri thức...`, "info", 8000);
-      const res = await window.ApiService.uploadDocument(file, title);
+      const res = await window.ApiService.uploadDocument(file, title, state.studentId);
       showToast(`Nạp thành công! Đã trích xuất ${res.total_chunks || 0} đoạn quy chế.`, "success", 4500);
 
       clearAttachmentBar();
@@ -658,40 +815,60 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!elements.chatSessionsList) return;
 
     try {
-      const data = await window.ApiService.getSessions(50);
+      const data = await window.ApiService.getSessions(50, state.studentId);
       const sessions = data.sessions || [];
+      state.allSessionsList = sessions;
       state.sessionsList = sessions;
-
-      const pinnedSessions = sessions.filter((s) => s.is_pinned);
-      const recentSessions = sessions.filter((s) => !s.is_pinned);
-
-      // 1. Render Pinned Group
-      if (elements.sessionsPinnedGroup && elements.sessionsPinnedList) {
-        if (pinnedSessions.length > 0) {
-          elements.sessionsPinnedGroup.style.display = "block";
-          elements.sessionsPinnedList.innerHTML = "";
-          pinnedSessions.forEach((s) => {
-            elements.sessionsPinnedList.appendChild(createSessionItemElement(s));
-          });
-        } else {
-          elements.sessionsPinnedGroup.style.display = "none";
-          elements.sessionsPinnedList.innerHTML = "";
-        }
-      }
-
-      // 2. Render Recent Group
-      if (elements.sessionsRecentGroup && elements.sessionsRecentList) {
-        elements.sessionsRecentList.innerHTML = "";
-        if (recentSessions.length > 0) {
-          recentSessions.forEach((s) => {
-            elements.sessionsRecentList.appendChild(createSessionItemElement(s));
-          });
-        } else if (pinnedSessions.length === 0) {
-          elements.sessionsRecentList.innerHTML = `<div class="empty-sessions-hint">Chưa có lịch sử cuộc trò chuyện</div>`;
-        }
-      }
+      renderSessionsFromState();
     } catch (err) {
       console.warn("Could not load sessions list:", err);
+    }
+  }
+
+  function renderSessionsFromState() {
+    let sessions = [...(state.allSessionsList || [])];
+
+    // Real-time filter by search query
+    if (state.searchQuery && state.searchQuery.trim()) {
+      const q = state.searchQuery.trim().toLowerCase();
+      sessions = sessions.filter((s) => (s.title || "").toLowerCase().includes(q));
+    }
+
+    // Filter by pinned mode
+    if (state.filterMode === "pinned") {
+      sessions = sessions.filter((s) => s.is_pinned);
+    }
+
+    const pinnedSessions = sessions.filter((s) => s.is_pinned);
+    const recentSessions = sessions.filter((s) => !s.is_pinned);
+
+    // 1. Render Pinned Group
+    if (elements.sessionsPinnedGroup && elements.sessionsPinnedList) {
+      if (pinnedSessions.length > 0) {
+        elements.sessionsPinnedGroup.style.display = "block";
+        elements.sessionsPinnedList.innerHTML = "";
+        pinnedSessions.forEach((s) => {
+          elements.sessionsPinnedList.appendChild(createSessionItemElement(s));
+        });
+      } else {
+        elements.sessionsPinnedGroup.style.display = "none";
+        elements.sessionsPinnedList.innerHTML = "";
+      }
+    }
+
+    // 2. Render Recent Group
+    if (elements.sessionsRecentGroup && elements.sessionsRecentList) {
+      elements.sessionsRecentList.innerHTML = "";
+      if (recentSessions.length > 0) {
+        recentSessions.forEach((s) => {
+          elements.sessionsRecentList.appendChild(createSessionItemElement(s));
+        });
+      } else if (pinnedSessions.length === 0) {
+        const hintText = state.searchQuery
+          ? "Không tìm thấy cuộc trò chuyện phù hợp"
+          : (state.filterMode === "pinned" ? "Chưa có cuộc trò chuyện nào được ghim" : "Chưa có lịch sử cuộc trò chuyện");
+        elements.sessionsRecentList.innerHTML = `<div class="empty-sessions-hint">${hintText}</div>`;
+      }
     }
   }
 
@@ -707,16 +884,32 @@ document.addEventListener("DOMContentLoaded", () => {
       <span class="session-title" title="${escapeHtml(titleText)}">${escapeHtml(titleText)}</span>
       <div class="session-actions">
         <button type="button" class="btn-session-action btn-pin-session ${session.is_pinned ? 'is-pinned' : ''}" title="${session.is_pinned ? 'Bỏ ghim' : 'Ghim lên đầu'}">
-          📌
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="17" x2="12" y2="22"></line>
+            <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+          </svg>
         </button>
         <button type="button" class="btn-session-action btn-rename-session" title="Đổi tên cuộc trò chuyện">
-          ✏️
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"></path>
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+          </svg>
         </button>
         <button type="button" class="btn-session-action btn-word-session" title="Xuất file Word (.doc)">
-          📄
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+          </svg>
         </button>
         <button type="button" class="btn-session-action btn-delete-session" title="Xóa cuộc trò chuyện này">
-          🗑️
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
         </button>
       </div>
     `;
@@ -829,20 +1022,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function deleteSession(sessionId) {
-    if (!confirm("Bạn có chắc muốn xóa vĩnh viễn cuộc trò chuyện này cùng toàn bộ tin nhắn?")) return;
-
-    try {
-      await window.ApiService.deleteChatHistory(sessionId);
-      showToast("Đã xóa cuộc trò chuyện thành công.", "info", 2000);
-
-      if (state.sessionId === sessionId) {
-        startNewChatSession(false);
-      }
-      await loadSessionsList();
-    } catch (err) {
-      showToast(`Lỗi khi xóa cuộc trò chuyện: ${err.message}`, "error");
-    }
+  function deleteSession(sessionId) {
+    const s = (state.allSessionsList || []).find((item) => item.session_id === sessionId);
+    const title = s ? s.title : "Cuộc trò chuyện này";
+    openConfirmDeleteModal(sessionId, title);
   }
 
   // =========================================================================
@@ -936,10 +1119,25 @@ document.addEventListener("DOMContentLoaded", () => {
           botMsgElements.cursor.remove();
         }
 
-        botMsgElements.contentBox.innerHTML = `<span style="color:#ef4444;">Xin lỗi, đã xảy ra lỗi kết nối: ${escapeHtml(err.message)}</span>`;
+        const friendlyNotice = "Sever đang bảo trì sinh viên vui lòng chờ !!!";
+        botMsgElements.contentBox.innerHTML = `
+          <div class="maintenance-notice-card">
+            <span class="notice-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+            </span>
+            <div>
+              <div class="notice-title">Thông báo hệ thống</div>
+              <div class="notice-body">${friendlyNotice}</div>
+            </div>
+          </div>
+        `;
         state.isProcessing = false;
         elements.btnSend.disabled = false;
-        showToast("Không thể nhận câu trả lời từ máy chủ.", "error");
+        showToast(friendlyNotice, "error", 6000);
       },
     });
   }
@@ -1316,7 +1514,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       showToast(`Đang phân tích và nạp tệp "${state.selectedFile.name}"...`, "info", 8000);
-      const res = await window.ApiService.uploadDocument(state.selectedFile, title);
+      const res = await window.ApiService.uploadDocument(state.selectedFile, title, state.studentId);
       showToast(`Nạp thành công! Đã trích xuất ${res.total_chunks || 0} đoạn trích.`, "success");
 
       state.selectedFile = null;
@@ -1337,52 +1535,99 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!elements.documentsList) return;
 
     try {
-      const docs = await window.ApiService.getDocuments();
+      const rawDocs = await window.ApiService.getDocuments(state.studentId);
       elements.documentsList.innerHTML = "";
 
-      if (!docs || docs.length === 0) {
-        elements.documentsList.innerHTML = `<div style="font-size:0.85rem; color:#8e918f; padding:16px 0; text-align:center;">Chưa có tài liệu quy chế nào trong kho tri thức.</div>`;
-        if (elements.docCountBadge) elements.docCountBadge.textContent = "0";
+      // Phân quyền: Lọc bỏ hoàn toàn tài liệu gốc Nhà trường (ntu_quy_che_2026) khỏi danh sách chỉnh sửa/xóa của sinh viên
+      const studentDocs = (rawDocs || []).filter(
+        (doc) =>
+          !doc.is_system_doc &&
+          doc.doc_id !== "ntu_quy_che_2026" &&
+          doc.filename !== "quy_che_dao_tao_ntu.txt"
+      );
+
+      if (elements.docCountBadge) {
+        elements.docCountBadge.textContent = `${studentDocs.length}`;
+      }
+
+      if (studentDocs.length === 0) {
+        elements.documentsList.innerHTML = `
+          <div style="font-size:0.85rem; color:#8e918f; padding:22px 0; text-align:center;">
+            Bạn chưa nạp tài liệu riêng nào.<br>
+            <span style="font-size:0.78rem; color:#6b7280;">(Tài liệu gốc của Nhà trường vẫn được hệ thống RAG dùng trả lời tự động ngầm).</span>
+          </div>`;
         return;
       }
 
-      if (elements.docCountBadge) {
-        elements.docCountBadge.textContent = `${docs.length}`;
-      }
-
-      docs.forEach((doc) => {
+      studentDocs.forEach((doc) => {
         const item = document.createElement("div");
         item.className = "doc-item";
 
-        const titleText = doc.title || doc.filename || "Quy chế";
+        const titleText = doc.title || doc.filename || "Tài liệu sinh viên";
         const chunksCount = doc.total_chunks || 0;
 
         item.innerHTML = `
           <div class="doc-info" title="${escapeHtml(titleText)}">
             <span class="doc-name">${escapeHtml(titleText)}</span>
             <span class="doc-meta">
-              <span>${chunksCount} chunks</span>
+              <span>${chunksCount} đoạn trích</span>
               <span>•</span>
-              <span>${doc.filename ? escapeHtml(doc.filename.slice(0, 24)) : "PDF"}</span>
+              <span>${doc.filename ? escapeHtml(doc.filename.slice(0, 26)) : "Tài liệu"}</span>
             </span>
           </div>
-          <button class="btn-delete-doc" title="Xóa tài liệu này" data-docid="${doc.doc_id}">
-            🗑️
-          </button>
+          <div class="doc-actions" style="display:flex; gap:6px; align-items:center;">
+            <button type="button" class="btn-session-action btn-doc-action-view" title="Xem nội dung đã trích xuất" data-docid="${doc.doc_id}">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
+            <button type="button" class="btn-session-action btn-doc-action-rename" title="Đổi tên tài liệu" data-docid="${doc.doc_id}">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+              </svg>
+            </button>
+            <button type="button" class="btn-session-action btn-doc-action-delete" title="Xóa tài liệu này" data-docid="${doc.doc_id}">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+            </button>
+          </div>
         `;
 
-        const deleteBtn = item.querySelector(".btn-delete-doc");
+        // 1. Xem nội dung
+        const viewBtn = item.querySelector(".btn-doc-action-view");
+        viewBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openDocContentModal(doc.doc_id, titleText, doc.filename);
+        });
+
+        // 2. Sửa tên
+        const renameBtn = item.querySelector(".btn-doc-action-rename");
+        renameBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openDocRenameModal(doc.doc_id, titleText);
+        });
+
+        // 3. Xóa tài liệu
+        const deleteBtn = item.querySelector(".btn-doc-action-delete");
         deleteBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
-          const docId = deleteBtn.getAttribute("data-docid");
-          if (!confirm(`Bạn có chắc muốn xóa tài liệu này khỏi kho tri thức?`)) return;
+          deleteBtn.disabled = true;
+          deleteBtn.innerHTML = `...`;
 
           try {
-            await window.ApiService.deleteDocument(docId);
-            showToast("Đã xóa tài liệu khỏi cơ sở tri thức.", "success");
+            await window.ApiService.deleteDocument(doc.doc_id);
+            showToast("Đã xóa tài liệu khỏi cơ sở tri thức.", "success", 2500);
             await loadDocuments();
           } catch (delErr) {
             showToast(`Lỗi khi xóa: ${delErr.message}`, "error");
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
           }
         });
 
@@ -1584,7 +1829,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let wDetailText = "";
 
     if (gpa < 1.0) {
-      wBadgeText = "⚠️ Cảnh báo học vụ";
+      wBadgeText = "Cảnh báo học vụ";
       wBadgeClass = "status-danger";
       wDetailText = `Cảnh báo: Điểm TBHK đạt ${gpa.toFixed(2)} (< 1.00) thuộc diện CẢNH BÁO HỌC VỤ theo Điều 7 NTU.`;
     } else if (gpa < (1.0 + year * 0.15)) {
@@ -1802,7 +2047,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       showToast("Đang gửi ảnh lên máy chủ để xử lý OCR & Vector...", "info", 8000);
-      const res = await window.ApiService.scanCameraDocument(state.capturedBlob, title);
+      const res = await window.ApiService.scanCameraDocument(state.capturedBlob, title, state.studentId);
       showToast(`Quét thành công! Đã trích xuất ${res.total_chunks} đoạn quy chế.`, "success", 4000);
 
       closeCameraScannerModal();
@@ -2056,5 +2301,288 @@ document.addEventListener("DOMContentLoaded", () => {
     if (inTable) flushTable();
 
     return result.join("");
+  }
+
+  // =========================================================================
+  // MODAL 6: Custom UI Confirmation for Deleting History (No window.confirm)
+  // =========================================================================
+  function setupConfirmDeleteModalEvents() {
+    if (elements.btnCancelDeleteHistory) {
+      elements.btnCancelDeleteHistory.addEventListener("click", closeConfirmDeleteModal);
+    }
+    if (elements.btnConfirmDeleteHistory) {
+      elements.btnConfirmDeleteHistory.addEventListener("click", handleConfirmDeleteHistory);
+    }
+    const modalDelete = elements.modalConfirmDelete || document.getElementById("modal-history-action");
+    if (modalDelete) {
+      modalDelete.addEventListener("click", (e) => {
+        if (e.target === modalDelete) closeConfirmDeleteModal();
+      });
+    }
+  }
+
+  function openConfirmDeleteModal(sessionId, sessionTitle) {
+    state.deletingSessionId = sessionId;
+    state.deletingSessionName = sessionTitle || "Cuộc trò chuyện";
+    if (elements.confirmDeleteSessionName) {
+      elements.confirmDeleteSessionName.textContent = state.deletingSessionName;
+    }
+    const modalDelete = elements.modalConfirmDelete || document.getElementById("modal-history-action");
+    if (modalDelete) {
+      modalDelete.style.display = "flex";
+      modalDelete.setAttribute("aria-hidden", "false");
+    }
+  }
+
+  function closeConfirmDeleteModal() {
+    state.deletingSessionId = null;
+    state.deletingSessionName = "";
+    const modalDelete = elements.modalConfirmDelete || document.getElementById("modal-history-action");
+    if (modalDelete) {
+      modalDelete.style.display = "none";
+      modalDelete.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  async function handleConfirmDeleteHistory() {
+    if (!state.deletingSessionId) return;
+    const targetId = state.deletingSessionId;
+    closeConfirmDeleteModal();
+
+    try {
+      await window.ApiService.deleteChatHistory(targetId);
+      showToast("Đã xóa vĩnh viễn cuộc trò chuyện.", "info", 2000);
+
+      if (state.sessionId === targetId) {
+        startNewChatSession(false);
+      }
+      await loadSessionsList();
+    } catch (err) {
+      showToast(`Lỗi khi xóa cuộc trò chuyện: ${err.message}`, "error");
+    }
+  }
+
+  // =========================================================================
+  // MODAL 7: View Student Document Extracted Content (GET /detail)
+  // =========================================================================
+  function setupDocContentModalEvents() {
+    if (elements.btnCloseDocContent) elements.btnCloseDocContent.addEventListener("click", closeDocContentModal);
+    if (elements.btnCloseDocContentFooter) elements.btnCloseDocContentFooter.addEventListener("click", closeDocContentModal);
+    if (elements.modalDocContent) {
+      elements.modalDocContent.addEventListener("click", (e) => {
+        if (e.target === elements.modalDocContent) closeDocContentModal();
+      });
+    }
+  }
+
+  async function openDocContentModal(docId, docTitle, filename) {
+    if (!elements.modalDocContent) return;
+    elements.modalDocContent.style.display = "flex";
+    elements.modalDocContent.setAttribute("aria-hidden", "false");
+
+    if (elements.docContentModalTitle) {
+      elements.docContentModalTitle.textContent = docTitle || "Chi tiết tài liệu sinh viên";
+    }
+    if (elements.docContentModalMeta) {
+      elements.docContentModalMeta.textContent = `Tệp: ${filename || docId} • Đang tải nội dung văn bản...`;
+    }
+    if (elements.docContentTextBox) {
+      elements.docContentTextBox.textContent = "⏳ Đang kết xuất toàn bộ nội dung văn bản đã trích xuất...";
+    }
+
+    try {
+      const detail = await window.ApiService.getDocumentDetail(docId);
+      if (elements.docContentModalTitle) {
+        elements.docContentModalTitle.textContent = detail.title || docTitle || "Chi tiết tài liệu";
+      }
+      if (elements.docContentModalMeta) {
+        elements.docContentModalMeta.textContent = `Tệp: ${detail.filename || filename || "Tài liệu"} • ${detail.total_chunks || 0} đoạn trích • ${detail.char_count || 0} ký tự`;
+      }
+      if (elements.docContentTextBox) {
+        elements.docContentTextBox.textContent = detail.content || "(Tài liệu trống hoặc chưa có nội dung văn bản)";
+      }
+    } catch (err) {
+      if (elements.docContentTextBox) {
+        elements.docContentTextBox.textContent = `Lỗi trích xuất: ${err.message}`;
+      }
+      showToast(`Không thể tải nội dung tài liệu: ${err.message}`, "error");
+    }
+  }
+
+  function closeDocContentModal() {
+    if (elements.modalDocContent) {
+      elements.modalDocContent.style.display = "none";
+      elements.modalDocContent.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  // =========================================================================
+  // MODAL 8: Student Settings & Profile (MSSV, TTS Speed, Clear All History)
+  // =========================================================================
+  function initStudentSettings() {
+    state.studentId = localStorage.getItem("ntu_student_id") || "";
+    state.ttsSpeed = parseFloat(localStorage.getItem("ntu_tts_speed") || "1.0");
+
+    if (elements.inputStudentMssv) {
+      elements.inputStudentMssv.value = state.studentId;
+    }
+    if (elements.rangeTtsSpeed) {
+      elements.rangeTtsSpeed.value = state.ttsSpeed;
+    }
+    if (elements.ttsSpeedLabel) {
+      elements.ttsSpeedLabel.textContent = `${state.ttsSpeed.toFixed(1)}x`;
+    }
+    if (window.VoiceManager && typeof window.VoiceManager.setSpeechRate === "function") {
+      window.VoiceManager.setSpeechRate(state.ttsSpeed);
+    }
+  }
+
+  function setupStudentSettingsModalEvents() {
+    if (elements.btnCloseStudentSettings) elements.btnCloseStudentSettings.addEventListener("click", closeStudentSettingsModal);
+    if (elements.btnCloseSettingsFooter) elements.btnCloseSettingsFooter.addEventListener("click", closeStudentSettingsModal);
+    if (elements.modalStudentSettings) {
+      elements.modalStudentSettings.addEventListener("click", (e) => {
+        if (e.target === elements.modalStudentSettings) closeStudentSettingsModal();
+      });
+    }
+
+    // Save MSSV
+    if (elements.btnSaveMssv && elements.inputStudentMssv) {
+      elements.btnSaveMssv.addEventListener("click", () => {
+        const val = elements.inputStudentMssv.value.trim();
+        state.studentId = val;
+        localStorage.setItem("ntu_student_id", val);
+        showToast(val ? `Đã lưu MSSV: ${val}` : "Đã xóa MSSV (chế độ ẩn danh).", "success", 2500);
+        // Reload conversations and documents isolated for this student
+        loadSessionsList();
+        loadDocuments();
+      });
+
+      elements.inputStudentMssv.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          elements.btnSaveMssv.click();
+        }
+      });
+    }
+
+    // Adjust TTS Speed Slider
+    if (elements.rangeTtsSpeed) {
+      elements.rangeTtsSpeed.addEventListener("input", (e) => {
+        const speed = parseFloat(e.target.value) || 1.0;
+        state.ttsSpeed = speed;
+        localStorage.setItem("ntu_tts_speed", speed.toString());
+        if (elements.ttsSpeedLabel) {
+          elements.ttsSpeedLabel.textContent = `${speed.toFixed(1)}x`;
+        }
+        if (window.VoiceManager && typeof window.VoiceManager.setSpeechRate === "function") {
+          window.VoiceManager.setSpeechRate(speed);
+        }
+      });
+    }
+
+    // Clear All Personal History
+    if (elements.btnClearAllHistory) {
+      elements.btnClearAllHistory.addEventListener("click", async () => {
+        try {
+          elements.btnClearAllHistory.disabled = true;
+          elements.btnClearAllHistory.textContent = "⏳ Đang xóa toàn bộ...";
+          await window.ApiService.clearAllSessions(state.studentId);
+          showToast("Đã xóa toàn bộ lịch sử cá nhân.", "success", 3000);
+          startNewChatSession(false);
+          await loadSessionsList();
+          closeStudentSettingsModal();
+        } catch (err) {
+          showToast(`Lỗi khi xóa lịch sử: ${err.message}`, "error");
+        } finally {
+          if (elements.btnClearAllHistory) {
+            elements.btnClearAllHistory.disabled = false;
+            elements.btnClearAllHistory.textContent = "Xóa toàn bộ lịch sử trò chuyện";
+          }
+        }
+      });
+    }
+  }
+
+  function openStudentSettingsModal() {
+    if (!elements.modalStudentSettings) return;
+    if (elements.inputStudentMssv) {
+      elements.inputStudentMssv.value = state.studentId || "";
+    }
+    if (elements.rangeTtsSpeed) {
+      elements.rangeTtsSpeed.value = state.ttsSpeed || 1.0;
+    }
+    if (elements.ttsSpeedLabel) {
+      elements.ttsSpeedLabel.textContent = `${(state.ttsSpeed || 1.0).toFixed(1)}x`;
+    }
+    elements.modalStudentSettings.style.display = "flex";
+    elements.modalStudentSettings.setAttribute("aria-hidden", "false");
+  }
+
+  function closeStudentSettingsModal() {
+    if (elements.modalStudentSettings) {
+      elements.modalStudentSettings.style.display = "none";
+      elements.modalStudentSettings.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  // =========================================================================
+  // MODAL 9: Rename Student Document (PATCH /documents/{doc_id})
+  // =========================================================================
+  function setupDocRenameModalEvents() {
+    if (elements.btnCloseRenameDoc) elements.btnCloseRenameDoc.addEventListener("click", closeDocRenameModal);
+    if (elements.btnCancelRenameDoc) elements.btnCancelRenameDoc.addEventListener("click", closeDocRenameModal);
+    if (elements.modalRenameDoc) {
+      elements.modalRenameDoc.addEventListener("click", (e) => {
+        if (e.target === elements.modalRenameDoc) closeDocRenameModal();
+      });
+    }
+    if (elements.btnConfirmRenameDoc) elements.btnConfirmRenameDoc.addEventListener("click", handleConfirmRenameDoc);
+    if (elements.inputDocRename) {
+      elements.inputDocRename.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          handleConfirmRenameDoc();
+        }
+      });
+    }
+  }
+
+  function openDocRenameModal(docId, currentTitle) {
+    state.renamingDocId = docId;
+    if (elements.inputDocRename) {
+      elements.inputDocRename.value = currentTitle || "";
+    }
+    if (elements.modalRenameDoc) {
+      elements.modalRenameDoc.style.display = "flex";
+      elements.modalRenameDoc.setAttribute("aria-hidden", "false");
+      setTimeout(() => elements.inputDocRename?.focus(), 50);
+    }
+  }
+
+  function closeDocRenameModal() {
+    state.renamingDocId = null;
+    if (elements.modalRenameDoc) {
+      elements.modalRenameDoc.style.display = "none";
+      elements.modalRenameDoc.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  async function handleConfirmRenameDoc() {
+    if (!state.renamingDocId) return;
+    const newTitle = elements.inputDocRename ? elements.inputDocRename.value.trim() : "";
+    if (!newTitle) {
+      showToast("Vui lòng nhập tiêu đề cho tài liệu.", "info");
+      return;
+    }
+
+    try {
+      await window.ApiService.updateDocumentTitle(state.renamingDocId, newTitle);
+      showToast("Đã đổi tên tài liệu thành công.", "success", 2000);
+      closeDocRenameModal();
+      await loadDocuments();
+    } catch (err) {
+      showToast(`Lỗi khi đổi tên tài liệu: ${err.message}`, "error");
+    }
   }
 });

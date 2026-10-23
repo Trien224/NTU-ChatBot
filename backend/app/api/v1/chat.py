@@ -1,8 +1,8 @@
 """Chat API endpoints for RAG-powered regulations inquiry and session history."""
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 import html
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from app.db.repositories.chat_repo import ChatRepository
 from app.models.chat_model import (
@@ -25,12 +25,15 @@ chat_repo = ChatRepository()
     "/sessions",
     response_model=SessionListResponse,
     summary="Lấy danh sách các cuộc trò chuyện",
-    description="Truy xuất danh sách lịch sử hội thoại, ưu tiên các phiên được Ghim (is_pinned: True) lên trước.",
+    description="Truy xuất danh sách lịch sử hội thoại, ưu tiên các phiên được Ghim (is_pinned: True) lên trước. Hỗ trợ lọc theo student_id.",
 )
-async def list_chat_sessions(limit: int = 50) -> SessionListResponse:
+async def list_chat_sessions(
+    limit: int = 50,
+    student_id: Optional[str] = Query(None, description="Mã số sinh viên để lọc lịch sử riêng"),
+) -> SessionListResponse:
     """Retrieve all available chat sessions ordered by pinned status and updated_at."""
     try:
-        sessions = await chat_repo.list_sessions(limit=limit)
+        sessions = await chat_repo.list_sessions(limit=limit, student_id=student_id)
         return SessionListResponse(total_sessions=len(sessions), sessions=sessions)
     except Exception as exc:
         logger.error("Error listing chat sessions: %s", exc, exc_info=True)
@@ -253,40 +256,7 @@ body {{
         ) from exc
 
 
-@router.delete(
-    "/history/{session_id}",
-    summary="Xóa lịch sử hội thoại của một phiên",
-    description="Xóa toàn bộ các tin nhắn và metadata thuộc phiên chat tương ứng.",
-)
-async def clear_chat_history(session_id: str) -> Dict[str, Any]:
-    """Clear all chat messages associated with a session ID.
 
-    Args:
-        session_id: Target session identifier.
-
-    Returns:
-        Dict[str, Any]: Operation status report.
-    """
-    try:
-        success = await chat_repo.clear_history(session_id=session_id)
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Không thể xóa lịch sử phiên chat.",
-            )
-        return {
-            "status": "success",
-            "message": f"Đã xóa toàn bộ lịch sử của phiên {session_id}.",
-            "session_id": session_id,
-        }
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error("Error clearing history for session %s: %s", session_id, exc, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Lỗi khi xóa lịch sử phiên: {str(exc)}",
-        ) from exc
 
 
 @router.post(
@@ -423,4 +393,29 @@ async def clear_chat_history(session_id: str) -> Dict[str, Any]:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi khi xóa lịch sử phiên: {str(exc)}",
+        ) from exc
+
+
+@router.delete(
+    "/sessions/all",
+    summary="Xóa toàn bộ lịch sử hội thoại cá nhân",
+    description="Xóa toàn bộ các phiên trò chuyện và tin nhắn, hỗ trợ lọc theo student_id nếu được truyền.",
+)
+async def clear_all_chat_sessions(
+    student_id: Optional[str] = Query(None, description="Mã số sinh viên (tùy chọn)"),
+) -> Dict[str, Any]:
+    """Delete all chat sessions and messages for a student (or all sessions if not specified)."""
+    try:
+        deleted = await chat_repo.clear_all_sessions(student_id=student_id)
+        return {
+            "status": "success",
+            "message": f"Đã xóa thành công {deleted} cuộc trò chuyện.",
+            "deleted_count": deleted,
+            "student_id": student_id,
+        }
+    except Exception as exc:
+        logger.error("Error clearing all sessions: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi xóa toàn bộ lịch sử: {str(exc)}",
         ) from exc
