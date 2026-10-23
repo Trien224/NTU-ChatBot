@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 TEMP_DATA_DIR = BASE_DIR / "data_temp"
 
-ALLOWED_EXTENSIONS: Set[str] = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".txt"}
+ALLOWED_EXTENSIONS: Set[str] = {
+    ".pdf", ".txt", ".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".mp3", ".wav"
+}
 
 
 def ensure_temp_dir() -> Path:

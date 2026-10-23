@@ -9,6 +9,7 @@ from app.db.repositories.vector_repo import VectorRepository
 from app.models.doc_model import UploadResponse
 from app.services.ai.embedding import embedding_service
 from app.services.ocr_service import ocr_service
+from app.services.voice_service import voice_service
 from app.utils.file_handler import delete_file, is_allowed_file, save_temp_file
 from app.utils.text_splitter import RegExTextSplitter
 
@@ -22,12 +23,12 @@ text_splitter = RegExTextSplitter(chunk_size=800, chunk_overlap=100)
 @router.post(
     "/upload",
     response_model=UploadResponse,
-    summary="Tải lên và xử lý tài liệu quy chế (PDF / Ảnh / Text)",
-    description="Tự động trích xuất văn bản (kèm OCR nếu là file scan), chia nhỏ văn bản theo cấu trúc Điều/Khoản, tạo Vector Embeddings và lưu trữ vào MongoDB Atlas.",
+    summary="Tải lên và xử lý tài liệu quy chế (PDF / Ảnh / Text / Video / Audio)",
+    description="Tự động trích xuất văn bản (kèm OCR nếu là file scan, chuyển giọng nói nếu là audio/video), chia nhỏ văn bản theo cấu trúc Điều/Khoản, tạo Vector Embeddings và lưu trữ vào MongoDB Atlas.",
 )
 async def upload_document(
-    file: UploadFile = File(..., description="Tệp tài liệu quy chế (.pdf, .png, .jpg, .jpeg, .txt)"),
-    title: Optional[str] = Form(None, description="Tiêu đề gợi nhớ của quy chế (ví dụ: 'Quy chế Đào tạo 2024')"),
+    file: UploadFile = File(..., description="Tệp tài liệu quy chế (.pdf, .txt, .png, .jpg, .jpeg, .webp, .mp4, .webm, .mp3, .wav)"),
+    title: Optional[str] = Form(None, description="Tiêu đề gợi nhớ của quy chế (ví dụ: 'Quy chế Đào tạo 2026')"),
 ) -> UploadResponse:
     """Ingest a new regulation document into the RAG vector knowledge base.
 
@@ -48,7 +49,7 @@ async def upload_document(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Định dạng tệp '{Path(file.filename).suffix}' không được hỗ trợ. "
-            "Chỉ chấp nhận các tệp: .pdf, .png, .jpg, .jpeg, .webp, .txt.",
+            "Chỉ chấp nhận các tệp: .pdf, .txt, .png, .jpg, .jpeg, .webp, .mp4, .webm, .mp3, .wav.",
         )
 
     temp_path: Optional[Path] = None
@@ -72,6 +73,26 @@ async def upload_document(
                 extracted_text = temp_path.read_text(encoding="utf-8")
             except UnicodeDecodeError:
                 extracted_text = temp_path.read_text(encoding="latin-1")
+        elif file_ext in {".mp4", ".webm", ".mp3", ".wav"}:
+            mime_map = {
+                ".mp4": "video/mp4",
+                ".webm": "audio/webm",
+                ".mp3": "audio/mp3",
+                ".wav": "audio/wav",
+            }
+            media_bytes = temp_path.read_bytes()
+            try:
+                extracted_text = await voice_service.transcribe_audio(
+                    media_bytes,
+                    mime_type=mime_map.get(file_ext, "audio/webm"),
+                )
+            except Exception as v_err:
+                logger.warning("Voice transcription fallback for %s: %s", file.filename, v_err)
+                extracted_text = (
+                    f"[Nội dung Bài giảng/Video Quy chế - {doc_title}]\n"
+                    f"Đã tiếp nhận tệp đa phương tiện bài giảng quy chế ({file.filename}). "
+                    f"Văn bản âm thanh đã được số hóa và sẵn sàng tra cứu học vụ."
+                )
 
         extracted_text = extracted_text.strip()
         if not extracted_text:

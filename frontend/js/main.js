@@ -1,18 +1,22 @@
 /**
- * NTU EduBot v2.0 - Main Application Controller
- * Orchestrates DOM interactions, SSE streaming, Vietnamese Hybrid Search citation viewer,
- * Academic GPA & Scholarship Calculator modal, Category Pills, and dynamic follow-up chips.
+ * NTU EduBot - Main Application Controller
+ * Google Gemini Web Ultra-Minimalist UI Architecture
+ * Dynamic Home Mode (Centered Greeting & Omnibox) vs Active Chat Mode,
+ * Single-line History Items, Regulations Library Modal, Multimodal Omnibox & SSE Streaming.
  */
 
 document.addEventListener("DOMContentLoaded", () => {
   // Application State
   const state = {
-    sessionId: getOrCreateSessionId(),
+    sessionId: createFreshSessionId(),
     topK: 5,
     autoTTS: false,
     isProcessing: false,
     selectedFile: null,
     selectedCameraFile: null,
+    selectedAttachmentFile: null,
+    renamingSessionId: null,
+    sessionsList: [],
     cameraFacingMode: "environment",
     mediaStream: null,
     capturedBlob: null,
@@ -20,45 +24,75 @@ document.addEventListener("DOMContentLoaded", () => {
     activeCitation: null,
   };
 
-  // DOM Elements
+  // DOM Elements Mapping
   const elements = {
+    // App & Layout
+    appContainer: document.querySelector(".app-container"),
+    mainChat: document.getElementById("main-chat"),
+    chatTopBar: document.getElementById("chat-topbar"),
+
     // Sidebar
     sidebar: document.getElementById("sidebar"),
     btnToggleSidebar: document.getElementById("btn-toggle-sidebar"),
+    btnToggleSidebarMobile: document.getElementById("btn-toggle-sidebar-mobile"),
+    btnSidebarSearch: document.getElementById("btn-sidebar-search"),
+    btnNewChat: document.getElementById("btn-new-chat"),
+    btnOpenDocsModal: document.getElementById("btn-open-docs-modal"),
+    btnSidebarGpaCalc: document.getElementById("btn-sidebar-gpa-calc"),
+    chatSessionsList: document.getElementById("chat-sessions-list"),
+    sessionsPinnedGroup: document.getElementById("sessions-pinned-group"),
+    sessionsPinnedList: document.getElementById("sessions-pinned-list"),
+    sessionsRecentGroup: document.getElementById("sessions-recent-group"),
+    sessionsRecentList: document.getElementById("sessions-recent-list"),
     statusDot: document.getElementById("status-dot"),
     statusText: document.getElementById("status-text"),
-    docTitleInput: document.getElementById("doc-title-input"),
-    fileInput: document.getElementById("file-input"),
-    fileDropzone: document.getElementById("file-dropzone"),
-    dropzoneText: document.getElementById("dropzone-text"),
-    btnUpload: document.getElementById("btn-upload"),
-    documentsList: document.getElementById("documents-list"),
-    btnClearChat: document.getElementById("btn-clear-chat"),
-    btnToggleUpload: document.getElementById("btn-toggle-upload"),
-    uploadAccordionBody: document.getElementById("upload-accordion-body"),
-    btnSidebarGpaCalc: document.getElementById("btn-sidebar-gpa-calc"),
-    docCountBadge: document.getElementById("doc-count-badge"),
+    btnSidebarSettings: document.getElementById("btn-sidebar-settings"),
 
-    // Chat Area
-    sessionDisplay: document.getElementById("session-display"),
+    // Topbar Controls
+    btnExportWordTopbar: document.getElementById("btn-export-word-topbar"),
     selectTopK: document.getElementById("select-topk"),
+    btnToggleTTS: document.getElementById("btn-toggle-tts"),
+    ttsIcon: document.getElementById("tts-icon"),
     toggleAutoTTS: document.getElementById("toggle-auto-tts"),
-    btnOpenGpaCalc: document.getElementById("btn-open-gpa-calc"),
-    chatMessages: document.getElementById("chat-messages"),
-    welcomeScreen: document.getElementById("welcome-screen"),
-    promptCards: document.querySelectorAll(".prompt-card"),
-
-    // Category Pills & Input Bar
-    categoryPills: document.getElementById("category-pills"),
-    chatForm: document.getElementById("chat-form"),
-    chatInput: document.getElementById("chat-input"),
-    btnMic: document.getElementById("btn-mic"),
-    btnSend: document.getElementById("btn-send"),
-    toastContainer: document.getElementById("toast-container"),
     btnToggleTheme: document.getElementById("btn-toggle-theme"),
     themeIcon: document.getElementById("theme-icon"),
 
-    // Citation Preview Modal Elements
+    // Workspace & Chat
+    chatMessages: document.getElementById("chat-messages"),
+    geminiContentArea: document.getElementById("gemini-content-area"),
+    geminiGreeting: document.getElementById("gemini-greeting"),
+    geminiPromptPills: document.getElementById("gemini-prompt-pills"),
+
+    // Gemini Omnibox
+    chatForm: document.getElementById("chat-form"),
+    chatInput: document.getElementById("chat-input"),
+    btnPlusMenu: document.getElementById("btn-plus-menu"),
+    geminiUploadMenu: document.getElementById("gemini-upload-menu"),
+    btnMic: document.getElementById("btn-mic"),
+    btnSend: document.getElementById("btn-send"),
+
+    // Attachment Preview Bar
+    chatAttachmentBar: document.getElementById("chat-attachment-bar"),
+    attachmentIcon: document.getElementById("attachment-icon"),
+    attachmentName: document.getElementById("attachment-name"),
+    attachmentSize: document.getElementById("attachment-size"),
+    attachmentTitleInput: document.getElementById("attachment-title-input"),
+    btnUploadAttachment: document.getElementById("btn-upload-attachment"),
+    btnCancelAttachment: document.getElementById("btn-cancel-attachment"),
+
+    // Omnibox Menu Options & Native File Inputs
+    menuOptDoc: document.getElementById("menu-opt-doc"),
+    menuOptImage: document.getElementById("menu-opt-image"),
+    menuOptCamera: document.getElementById("menu-opt-camera"),
+    menuOptMedia: document.getElementById("menu-opt-media"),
+    menuOptVoice: document.getElementById("menu-opt-voice"),
+    menuOptGpa: document.getElementById("menu-opt-gpa"),
+    menuInputDoc: document.getElementById("menu-input-doc"),
+    menuInputImage: document.getElementById("menu-input-image"),
+    menuInputMedia: document.getElementById("menu-input-media"),
+    smartphoneCameraInput: document.getElementById("smartphone-camera-input"),
+
+    // Modal 1: Citation Preview
     modalCitation: document.getElementById("modal-citation"),
     citationDocTitle: document.getElementById("citation-modal-doc-title"),
     citationLocation: document.getElementById("citation-modal-location"),
@@ -69,7 +103,7 @@ document.addEventListener("DOMContentLoaded", () => {
     btnDismissCitation: document.getElementById("btn-dismiss-citation"),
     btnCopyCitation: document.getElementById("btn-copy-citation"),
 
-    // GPA & Scholarship Calculator Modal Elements
+    // Modal 2: GPA & Scholarship Calculator
     modalGpaCalc: document.getElementById("modal-gpa-calc"),
     btnCloseGpaCalc: document.getElementById("btn-close-gpa-calc"),
     btnDismissGpaCalc: document.getElementById("btn-dismiss-gpa-calc"),
@@ -87,16 +121,7 @@ document.addEventListener("DOMContentLoaded", () => {
     warningDetail: document.getElementById("warning-detail"),
     warningBox: document.getElementById("warning-result-box"),
 
-    // Smartphone & Live Camera Elements
-    btnSmartphoneCamera: document.getElementById("btn-smartphone-camera"),
-    smartphoneCameraInput: document.getElementById("smartphone-camera-input"),
-    cameraPreviewBox: document.getElementById("camera-preview-box"),
-    cameraPreviewImg: document.getElementById("camera-preview-img"),
-    cameraPreviewName: document.getElementById("camera-preview-name"),
-    btnCancelCamPreview: document.getElementById("btn-cancel-cam-preview"),
-
-    btnTopbarCamera: document.getElementById("btn-topbar-camera"),
-    btnOpenLiveScanner: document.getElementById("btn-open-live-scanner"),
+    // Modal 3: Live Camera Scanner
     modalCameraScanner: document.getElementById("modal-camera-scanner"),
     btnCloseScanner: document.getElementById("btn-close-scanner"),
     cameraStream: document.getElementById("camera-stream"),
@@ -109,39 +134,59 @@ document.addEventListener("DOMContentLoaded", () => {
     btnCaptureScan: document.getElementById("btn-capture-scan"),
     btnRetakeScan: document.getElementById("btn-retake-scan"),
     btnConfirmUploadScan: document.getElementById("btn-confirm-upload-scan"),
+
+    // Modal 4: Rename Session
+    modalRenameSession: document.getElementById("modal-rename-session"),
+    btnCloseRename: document.getElementById("btn-close-rename"),
+    btnCancelRename: document.getElementById("btn-cancel-rename"),
+    btnConfirmRename: document.getElementById("btn-confirm-rename"),
+    inputSessionRename: document.getElementById("input-session-rename"),
+
+    // Modal 5: Regulation Documents Library
+    modalDocsLibrary: document.getElementById("modal-docs-library"),
+    btnCloseDocsModal: document.getElementById("btn-close-docs-modal"),
+    btnDismissDocsModal: document.getElementById("btn-dismiss-docs-modal"),
+    btnChooseFileModal: document.getElementById("btn-choose-file-modal"),
+    fileInput: document.getElementById("file-input"),
+    docTitleInput: document.getElementById("doc-title-input"),
+    btnUpload: document.getElementById("btn-upload"),
+    dropzoneText: document.getElementById("dropzone-text"),
+    documentsList: document.getElementById("documents-list"),
+    docCountBadge: document.getElementById("doc-count-badge"),
+
+    // Toast Notifications
+    toastContainer: document.getElementById("toast-container"),
   };
 
   // Initialize Application
   initApp();
 
   function initApp() {
-    // Initialize Academic Theme (Dark Slate default)
+    // 1. Initialize Academic Dark Theme (Default)
     initTheme();
 
-    // Set Session ID display
-    if (elements.sessionDisplay) {
-      elements.sessionDisplay.textContent = `Phiên: ${state.sessionId.slice(0, 12)}...`;
-    }
+    // 2. ALWAYS enter fresh Home Mode on load (centered Omnibox, greeting, suggestion pills)
+    startNewChatSession(false);
 
-    // Attach Event Listeners
+    // 3. Setup All Event Listeners
     setupEventListeners();
 
-    // Check Backend Health
+    // 4. Check Backend Health
     refreshHealthStatus();
 
-    // Load Ingested Documents
+    // 5. Load Chat Sessions list into Sidebar
+    loadSessionsList();
+
+    // 6. Preload Ingested Documents into Vector Catalog
     loadDocuments();
 
-    // Load Chat History
-    loadChatHistory();
-
-    // Initialize Calculator Values
+    // 7. Initialize GPA Calculator values
     calculateGpaAndScholarship();
     convertScore10();
   }
 
   // =========================================================================
-  // Theme Manager: Dark Slate (Default) / Light Mode Toggle
+  // Theme Manager: Dark Slate (Default) / Light Mode
   // =========================================================================
   function initTheme() {
     const savedTheme = localStorage.getItem("ntu_theme") || "dark";
@@ -154,40 +199,61 @@ document.addEventListener("DOMContentLoaded", () => {
     if (elements.themeIcon) {
       elements.themeIcon.textContent = theme === "dark" ? "🌙" : "☀️";
     }
-    if (elements.btnToggleTheme) {
-      elements.btnToggleTheme.setAttribute(
-        "title",
-        theme === "dark" ? "Chuyển sang Giao diện Sáng" : "Chuyển sang Giao diện Tối"
-      );
-    }
   }
 
   // =========================================================================
-  // State & Storage Helpers
+  // State & Session Management
   // =========================================================================
-  function getOrCreateSessionId() {
-    let sid = localStorage.getItem("ntu_edubot_session_id");
-    if (!sid) {
-      sid = `ntu_session_${Math.random().toString(36).substring(2, 10)}_${Date.now().toString(36)}`;
-      localStorage.setItem("ntu_edubot_session_id", sid);
-    }
-    return sid;
+  function createFreshSessionId() {
+    return `ntu_session_${Math.random().toString(36).substring(2, 10)}_${Date.now().toString(36)}`;
   }
 
-  function resetSessionId() {
-    const sid = `ntu_session_${Math.random().toString(36).substring(2, 10)}_${Date.now().toString(36)}`;
-    localStorage.setItem("ntu_edubot_session_id", sid);
-    state.sessionId = sid;
-    if (elements.sessionDisplay) {
-      elements.sessionDisplay.textContent = `Phiên: ${sid.slice(0, 12)}...`;
+  /**
+   * Reset workspace to the Ultra-Minimalist Gemini Home State:
+   * Centered Greeting ("Chúng ta nên bắt đầu từ đâu nhỉ?"), Omnibox in the middle,
+   * 4 suggestion pills below, empty chat messages area.
+   */
+  function startNewChatSession(showToastMsg = true) {
+    state.sessionId = createFreshSessionId();
+    localStorage.setItem("ntu_edubot_session_id", state.sessionId);
+
+    // 1. Enter Home Mode (Center layout)
+    if (elements.mainChat) {
+      elements.mainChat.classList.add("home-mode");
     }
-    return sid;
+
+    // 2. Clear Chat Messages
+    if (elements.chatMessages) {
+      elements.chatMessages.innerHTML = "";
+    }
+
+    // 3. Hide Topbar Word Export Button (only shown when conversation has messages)
+    if (elements.btnExportWordTopbar) {
+      elements.btnExportWordTopbar.style.display = "none";
+    }
+
+    // 4. Clear Omnibox input & cancel any pending attachment
+    if (elements.chatInput) {
+      elements.chatInput.value = "";
+      elements.chatInput.style.height = "auto";
+    }
+    clearAttachmentBar();
+
+    // 5. Highlight "Cuộc trò chuyện mới" in sidebar
+    if (elements.btnNewChat) {
+      elements.btnNewChat.classList.add("active-nav");
+    }
+    document.querySelectorAll(".session-item").forEach((el) => el.classList.remove("active"));
+
+    if (showToastMsg) {
+      showToast("Đã bắt đầu cuộc trò chuyện mới.", "info", 2000);
+    }
   }
 
   // =========================================================================
   // Toast Notifications
   // =========================================================================
-  function showToast(message, type = "info", duration = 4000) {
+  function showToast(message, type = "info", duration = 3500) {
     if (!elements.toastContainer) return;
 
     const toast = document.createElement("div");
@@ -199,8 +265,8 @@ document.addEventListener("DOMContentLoaded", () => {
     setTimeout(() => {
       toast.style.opacity = "0";
       toast.style.transform = "translateX(100%)";
-      toast.style.transition = "all 0.3s ease";
-      setTimeout(() => toast.remove(), 300);
+      toast.style.transition = "all 0.25s ease";
+      setTimeout(() => toast.remove(), 250);
     }, duration);
   }
 
@@ -208,12 +274,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // Event Listeners Setup
   // =========================================================================
   function setupEventListeners() {
-    // Mobile Sidebar Toggle
-    if (elements.btnToggleSidebar && elements.sidebar) {
-      elements.btnToggleSidebar.addEventListener("click", () => {
+    // 1. Sidebar Toggle (Desktop & Mobile)
+    const toggleSidebar = () => {
+      if (elements.sidebar) {
         elements.sidebar.classList.toggle("open");
-      });
-    }
+      }
+    };
+    if (elements.btnToggleSidebar) elements.btnToggleSidebar.addEventListener("click", toggleSidebar);
+    if (elements.btnToggleSidebarMobile) elements.btnToggleSidebarMobile.addEventListener("click", toggleSidebar);
 
     // Close sidebar when clicking outside on mobile
     document.addEventListener("click", (e) => {
@@ -221,34 +289,75 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.sidebar &&
         elements.sidebar.classList.contains("open") &&
         !elements.sidebar.contains(e.target) &&
+        elements.btnToggleSidebarMobile &&
+        !elements.btnToggleSidebarMobile.contains(e.target) &&
+        elements.btnToggleSidebar &&
         !elements.btnToggleSidebar.contains(e.target)
       ) {
         elements.sidebar.classList.remove("open");
       }
     });
 
-    // TopK Selector
+    // 2. New Chat Button
+    if (elements.btnNewChat) {
+      elements.btnNewChat.addEventListener("click", () => {
+        startNewChatSession(true);
+      });
+    }
+
+    // 3. Open Documents Library Modal
+    if (elements.btnOpenDocsModal) {
+      elements.btnOpenDocsModal.addEventListener("click", openDocsLibraryModal);
+    }
+
+    // 4. Open GPA Calculator Modal
+    if (elements.btnSidebarGpaCalc) {
+      elements.btnSidebarGpaCalc.addEventListener("click", openGpaCalcModal);
+    }
+
+    // 5. Topbar Word Export Button
+    if (elements.btnExportWordTopbar) {
+      elements.btnExportWordTopbar.addEventListener("click", () => {
+        exportWordForSession(state.sessionId);
+      });
+    }
+
+    // 6. TopK Selector
     if (elements.selectTopK) {
       elements.selectTopK.addEventListener("change", (e) => {
         state.topK = Number(e.target.value);
       });
     }
 
-    // Auto-TTS Toggle
-    if (elements.toggleAutoTTS) {
-      elements.toggleAutoTTS.addEventListener("change", (e) => {
-        state.autoTTS = e.target.checked;
+    // 7. Auto-TTS Toggle
+    if (elements.btnToggleTTS) {
+      elements.btnToggleTTS.addEventListener("click", () => {
+        state.autoTTS = !state.autoTTS;
+        if (elements.ttsIcon) {
+          elements.ttsIcon.textContent = state.autoTTS ? "🔊" : "🔇";
+        }
+        showToast(state.autoTTS ? "Đã bật tự động đọc câu trả lời." : "Đã tắt tự động đọc.", "info", 2000);
         if (!state.autoTTS && window.VoiceManager) {
           window.VoiceManager.stopSpeaking();
         }
       });
     }
 
-    // Auto-resizing Chat Textarea
+    // 8. Theme Toggle Listener
+    if (elements.btnToggleTheme) {
+      elements.btnToggleTheme.addEventListener("click", () => {
+        const active = document.documentElement.getAttribute("data-theme") || "dark";
+        const nextTheme = active === "dark" ? "light" : "dark";
+        applyTheme(nextTheme);
+        showToast(nextTheme === "dark" ? "Đã chuyển sang Giao diện Tối." : "Đã chuyển sang Giao diện Sáng.", "info", 2000);
+      });
+    }
+
+    // 9. Auto-resizing Chat Textarea
     if (elements.chatInput) {
       elements.chatInput.addEventListener("input", function () {
         this.style.height = "auto";
-        this.style.height = `${Math.min(this.scrollHeight, 140)}px`;
+        this.style.height = `${Math.min(this.scrollHeight, 180)}px`;
       });
 
       // Submit on Enter (Shift+Enter for newline)
@@ -260,7 +369,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    // Form Submit
+    // 10. Form Submit
     if (elements.chatForm) {
       elements.chatForm.addEventListener("submit", (e) => {
         e.preventDefault();
@@ -268,89 +377,24 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    // Prompt Suggestions Cards
-    elements.promptCards.forEach((card) => {
-      card.addEventListener("click", () => {
-        const text = card.getAttribute("data-prompt") || card.querySelector(".prompt-card-text")?.textContent;
-        if (text) {
-          elements.chatInput.value = text.trim();
+    // 11. Home Suggestion Pills (4 Ultra-clean Pills)
+    document.querySelectorAll(".gemini-pill").forEach((pill) => {
+      pill.addEventListener("click", () => {
+        const promptText = pill.getAttribute("data-prompt");
+        if (promptText && elements.chatInput) {
+          elements.chatInput.value = promptText;
           handleSendMessage();
         }
       });
     });
 
-    // Clear Chat / Reset Session
-    if (elements.btnClearChat) {
-      elements.btnClearChat.addEventListener("click", async () => {
-        if (!confirm("Bạn có chắc muốn làm mới cuộc trò chuyện và bắt đầu phiên mới?")) return;
-        try {
-          await window.ApiService.deleteChatHistory(state.sessionId);
-        } catch {
-          // Ignore if session had no history
-        }
-        resetSessionId();
-        if (elements.chatMessages) {
-          elements.chatMessages.innerHTML = "";
-          if (elements.welcomeScreen) {
-            elements.chatMessages.appendChild(elements.welcomeScreen);
-          }
-        }
-        showToast("Đã khởi tạo phiên trò chuyện mới.", "info");
-      });
-    }
+    // 12. Omnibox Plus Button & Multimodal Upload Popover Menu
+    setupGeminiOmniboxMenuEvents();
 
-    // Admin Upload Accordion Toggle
-    if (elements.btnToggleUpload && elements.uploadAccordionBody) {
-      elements.btnToggleUpload.addEventListener("click", () => {
-        const isCollapsed = elements.uploadAccordionBody.classList.contains("collapsed");
-        if (isCollapsed) {
-          elements.uploadAccordionBody.classList.remove("collapsed");
-          elements.btnToggleUpload.classList.add("expanded");
-          elements.btnToggleUpload.setAttribute("aria-expanded", "true");
-        } else {
-          elements.uploadAccordionBody.classList.add("collapsed");
-          elements.btnToggleUpload.classList.remove("expanded");
-          elements.btnToggleUpload.setAttribute("aria-expanded", "false");
-        }
-      });
-    }
+    // 13. Attachment Preview Bar Events
+    setupAttachmentBarEvents();
 
-    // Dropzone & File Input
-    if (elements.fileDropzone && elements.fileInput) {
-      elements.fileDropzone.addEventListener("click", () => {
-        elements.fileInput.click();
-      });
-
-      elements.fileInput.addEventListener("change", (e) => {
-        if (e.target.files && e.target.files[0]) {
-          handleFileSelected(e.target.files[0]);
-        }
-      });
-
-      elements.fileDropzone.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        elements.fileDropzone.classList.add("dragover");
-      });
-
-      elements.fileDropzone.addEventListener("dragleave", () => {
-        elements.fileDropzone.classList.remove("dragover");
-      });
-
-      elements.fileDropzone.addEventListener("drop", (e) => {
-        e.preventDefault();
-        elements.fileDropzone.classList.remove("dragover");
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-          handleFileSelected(e.dataTransfer.files[0]);
-        }
-      });
-    }
-
-    // Upload Button
-    if (elements.btnUpload) {
-      elements.btnUpload.addEventListener("click", handleDocumentUpload);
-    }
-
-    // Mic / Voice Input Button
+    // 14. Mic / Voice Input Button
     if (elements.btnMic && window.VoiceManager) {
       elements.btnMic.addEventListener("click", () => {
         window.VoiceManager.toggleRecording(
@@ -363,7 +407,7 @@ document.addEventListener("DOMContentLoaded", () => {
           (isRecording) => {
             if (isRecording) {
               elements.btnMic.classList.add("recording");
-              showToast("Đang lắng nghe... Nói câu hỏi của bạn.", "info", 3000);
+              showToast("Đang lắng nghe... Nói câu hỏi quy chế của bạn.", "info", 3000);
             } else {
               elements.btnMic.classList.remove("recording");
             }
@@ -372,40 +416,16 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    // Category Pills Filter Handlers
-    if (elements.categoryPills) {
-      elements.categoryPills.querySelectorAll(".pill-item").forEach((pill) => {
-        pill.addEventListener("click", () => {
-          elements.categoryPills.querySelectorAll(".pill-item").forEach((p) => p.classList.remove("active"));
-          pill.classList.add("active");
-
-          const topic = pill.getAttribute("data-topic");
-          handleCategoryPillSelect(topic);
-        });
-      });
-    }
-
-    // Citation Modal Event Handlers
+    // 15. Setup Modals Events
     setupCitationModalEvents();
-
-    // GPA Calculator Modal Event Handlers
     setupGpaCalculatorEvents();
-
-    // Live Camera & Smartphone Scanner Event Handlers
     setupCameraScannerEvents();
+    setupRenameSessionModalEvents();
+    setupDocsLibraryModalEvents();
 
-    // Theme Toggle Listener
-    if (elements.btnToggleTheme) {
-      elements.btnToggleTheme.addEventListener("click", () => {
-        const active = document.documentElement.getAttribute("data-theme") || "dark";
-        const nextTheme = active === "dark" ? "light" : "dark";
-        applyTheme(nextTheme);
-        showToast(nextTheme === "dark" ? "Đã chuyển sang Giao diện Tối." : "Đã chuyển sang Giao diện Sáng.", "info", 2000);
-      });
-    }
-
-    // Keyboard Shortcut Alt+C to Toggle GPA & Scholarship Calculator Modal
+    // 16. Global Keyboard Shortcuts
     document.addEventListener("keydown", (e) => {
+      // Alt+C: Toggle GPA Calculator Modal
       if (e.altKey && (e.key === "c" || e.key === "C")) {
         e.preventDefault();
         if (elements.modalGpaCalc && elements.modalGpaCalc.style.display === "flex") {
@@ -414,755 +434,414 @@ document.addEventListener("DOMContentLoaded", () => {
           openGpaCalcModal();
         }
       }
-    });
-  }
-
-  // =========================================================================
-  // Citation Modal Logic
-  // =========================================================================
-  function setupCitationModalEvents() {
-    if (elements.btnCloseCitation) {
-      elements.btnCloseCitation.addEventListener("click", closeCitationModal);
-    }
-    if (elements.btnDismissCitation) {
-      elements.btnDismissCitation.addEventListener("click", closeCitationModal);
-    }
-    if (elements.modalCitation) {
-      elements.modalCitation.addEventListener("click", (e) => {
-        if (e.target === elements.modalCitation) closeCitationModal();
-      });
-    }
-
-    if (elements.btnCopyCitation) {
-      elements.btnCopyCitation.addEventListener("click", () => {
-        if (!state.activeCitation) return;
-        const c = state.activeCitation;
-        const textToCopy = `[CĂN CỨ PHÁP LÝ TRÍCH DẪN - ĐẠI HỌC NGUYỄN TRÃI]\n` +
-          `Văn bản: ${c.title || c.doc_title || "Quy chế Đào tạo NTU"}\n` +
-          `Điều/Khoản: ${c.article || ""}${c.clause ? " - " + c.clause : ""}\n` +
-          `Độ tin cậy: ${c.score ? (c.score * 100).toFixed(1) + "%" : "Cao"}\n\n` +
-          `NỘI DUNG NGUYÊN VĂN:\n${c.content || ""}`;
-
-        navigator.clipboard.writeText(textToCopy).then(() => {
-          showToast("Đã sao chép trích dẫn căn cứ vào clipboard!", "success");
-        }).catch(() => {
-          showToast("Không thể sao chép vào clipboard.", "error");
-        });
-      });
-    }
-  }
-
-  function openCitationModal(sourceItem, queryText = "") {
-    state.activeCitation = sourceItem;
-
-    if (elements.citationDocTitle) {
-      elements.citationDocTitle.textContent = sourceItem.title || sourceItem.doc_title || "Quy chế Đào tạo trình độ Đại học - NTU";
-    }
-
-    const locText = [sourceItem.article, sourceItem.clause].filter(Boolean).join(" - ");
-    if (elements.citationLocation) {
-      elements.citationLocation.textContent = locText ? `Căn cứ: ${locText}` : "Căn cứ pháp lý trích dẫn";
-    }
-
-    if (elements.citationScore) {
-      const scoreNum = sourceItem.score ? Number(sourceItem.score) : 0.85;
-      const scorePct = (scoreNum * 100).toFixed(1);
-      elements.citationScore.textContent = `Độ tin cậy: ${scorePct}%`;
-    }
-
-    if (elements.citationFilename) {
-      elements.citationFilename.textContent = sourceItem.filename || "quy_che_dao_tao_ntu.txt";
-    }
-
-    if (elements.citationContent) {
-      const rawContent = sourceItem.content || "(Không có nội dung nguyên văn trích xuất)";
-      elements.citationContent.innerHTML = highlightKeywordsInText(rawContent, queryText || state.currentQuestion);
-    }
-
-    if (elements.modalCitation) {
-      elements.modalCitation.style.display = "flex";
-      elements.modalCitation.setAttribute("aria-hidden", "false");
-    }
-  }
-
-  function closeCitationModal() {
-    if (elements.modalCitation) {
-      elements.modalCitation.style.display = "none";
-      elements.modalCitation.setAttribute("aria-hidden", "true");
-    }
-  }
-
-  function highlightKeywordsInText(text, query) {
-    if (!text) return "";
-    let safe = escapeHtml(text);
-    if (!query) return safe;
-
-    const tokens = query
-      .toLowerCase()
-      .split(/[\s,?\.\!]+/)
-      .filter((w) => w.length > 2 && !["sinh", "viên", "trường", "được", "không", "cho", "của", "và"].includes(w));
-
-    tokens.forEach((token) => {
-      try {
-        const regex = new RegExp(`(${token})`, "gi");
-        safe = safe.replace(regex, '<span class="highlight-keyword">$1</span>');
-      } catch {
-        // Ignore regex compile errors on special chars
+      // Esc: Close any popovers or modals
+      if (e.key === "Escape") {
+        closeGeminiUploadMenu();
       }
     });
-
-    return safe;
   }
 
   // =========================================================================
-  // GPA & Scholarship Calculator Logic
+  // Gemini Omnibox: Plus Button & Popover Menu Events
   // =========================================================================
-  function setupGpaCalculatorEvents() {
-    // Open modal buttons (topbar & sidebar)
-    if (elements.btnOpenGpaCalc) {
-      elements.btnOpenGpaCalc.addEventListener("click", openGpaCalcModal);
-    }
-    if (elements.btnSidebarGpaCalc) {
-      elements.btnSidebarGpaCalc.addEventListener("click", openGpaCalcModal);
-    }
+  function setupGeminiOmniboxMenuEvents() {
+    if (!elements.btnPlusMenu || !elements.geminiUploadMenu) return;
 
-    // Close buttons
-    if (elements.btnCloseGpaCalc) {
-      elements.btnCloseGpaCalc.addEventListener("click", closeGpaCalcModal);
-    }
-    if (elements.btnDismissGpaCalc) {
-      elements.btnDismissGpaCalc.addEventListener("click", closeGpaCalcModal);
-    }
-    if (elements.modalGpaCalc) {
-      elements.modalGpaCalc.addEventListener("click", (e) => {
-        if (e.target === elements.modalGpaCalc) closeGpaCalcModal();
-      });
-    }
-
-    // Live calculation listeners
-    const calcInputs = [
-      elements.inputCalcGpa,
-      elements.inputCalcDrl,
-      elements.inputCalcCredits,
-      elements.selectCalcYear,
-      elements.checkHasFail,
-    ];
-    calcInputs.forEach((input) => {
-      if (input) {
-        input.addEventListener("input", calculateGpaAndScholarship);
-        input.addEventListener("change", calculateGpaAndScholarship);
-      }
-    });
-
-    // 10-to-4 Converter
-    if (elements.inputScore10) {
-      elements.inputScore10.addEventListener("input", convertScore10);
-    }
-  }
-
-  function openGpaCalcModal() {
-    if (elements.modalGpaCalc) {
-      elements.modalGpaCalc.style.display = "flex";
-      elements.modalGpaCalc.setAttribute("aria-hidden", "false");
-      calculateGpaAndScholarship();
-      convertScore10();
-    }
-  }
-
-  function closeGpaCalcModal() {
-    if (elements.modalGpaCalc) {
-      elements.modalGpaCalc.style.display = "none";
-      elements.modalGpaCalc.setAttribute("aria-hidden", "true");
-    }
-  }
-
-  function calculateGpaAndScholarship() {
-    const gpa = parseFloat(elements.inputCalcGpa?.value) || 0.0;
-    const drl = parseInt(elements.inputCalcDrl?.value, 10) || 0;
-    const credits = parseInt(elements.inputCalcCredits?.value, 10) || 0;
-    const year = parseInt(elements.selectCalcYear?.value, 10) || 1;
-    const hasFail = elements.checkHasFail ? elements.checkHasFail.checked : false;
-
-    // 1. Evaluate Scholarship KKHT (Điều 12, Điều 13 Quy chế NTU)
-    let sBadgeText = "Chưa đạt";
-    let sBadgeClass = "status-none";
-    let sDetailText = "";
-
-    if (credits < 15) {
-      sBadgeText = "Không đủ điều kiện";
-      sBadgeClass = "status-none";
-      sDetailText = `Khối lượng tín chỉ tích lũy trong kỳ (${credits} TC) chưa đạt mức tối thiểu 15 tín chỉ theo quy định tại Khoản 2 Điều 12.`;
-    } else if (hasFail) {
-      sBadgeText = "Không đủ điều kiện";
-      sBadgeClass = "status-none";
-      sDetailText = `Không xét cấp học bổng do có môn điểm dưới C (D+, D, F) hoặc phải thi lại theo quy định tại Điểm c Khoản 2 Điều 12.`;
-    } else if (gpa >= 3.60 && drl >= 90) {
-      sBadgeText = "Học bổng Xuất sắc";
-      sBadgeClass = "status-excellent";
-      sDetailText = `Chúc mừng bạn! Bạn đủ điều kiện xét cấp Học bổng loại Xuất sắc (Mức thưởng bằng 120% học phí kỳ theo Điều 13 NTU).`;
-    } else if (gpa >= 3.20 && drl >= 80) {
-      sBadgeText = "Học bổng Giỏi";
-      sBadgeClass = "status-good";
-      sDetailText = `Chúc mừng bạn! Bạn đủ điều kiện xét cấp Học bổng loại Giỏi (Mức thưởng bằng 100% học phí kỳ theo Điều 13 NTU).`;
-    } else if (gpa >= 2.50 && drl >= 80) {
-      sBadgeText = "Học bổng Khá";
-      sBadgeClass = "status-fair";
-      sDetailText = `Chúc mừng bạn! Bạn đủ điều kiện xét cấp Học bổng loại Khá (Mức thưởng bằng 80% học phí kỳ theo Điều 13 NTU).`;
-    } else {
-      sBadgeText = "Chưa đạt Học bổng";
-      sBadgeClass = "status-none";
-      sDetailText = `Chưa đủ điều kiện: Cần ĐTBCHK ≥ 2.50 và Điểm rèn luyện ≥ 80 điểm để xét cấp học bổng KKHT theo Điều 12.`;
-    }
-
-    if (elements.scholarshipBadge) {
-      elements.scholarshipBadge.textContent = sBadgeText;
-      elements.scholarshipBadge.className = `badge-status ${sBadgeClass}`;
-    }
-    if (elements.scholarshipDetail) {
-      elements.scholarshipDetail.textContent = sDetailText;
-    }
-
-    // 2. Evaluate Academic Warning (Điều 7 Quy chế NTU)
-    let wBadgeText = "An toàn";
-    let wBadgeClass = "status-safe";
-    let wDetailText = "";
-    let isWarningDanger = false;
-
-    if (gpa < 1.0) {
-      wBadgeText = "⚠️ Cảnh báo học vụ";
-      wBadgeClass = "status-danger";
-      isWarningDanger = true;
-      wDetailText = `Cảnh báo: Điểm TBHK đạt ${gpa.toFixed(2)} (< 1.00) thuộc diện CẢNH BÁO HỌC VỤ theo Điều 7 NTU. Kỳ tới bạn chỉ được đăng ký tối đa 14 tín chỉ!`;
-    } else if (gpa < (1.0 + year * 0.15)) {
-      wBadgeText = "Cần nỗ lực";
-      wBadgeClass = "status-fair";
-      wDetailText = `Điểm TBHK đạt ${gpa.toFixed(2)} ở mức cận an toàn cho sinh viên Năm ${year}. Bạn nên đăng ký học cải thiện các môn điểm D để nâng cao ĐTBCTL.`;
-    } else {
-      wBadgeText = "Học lực An toàn";
-      wBadgeClass = "status-safe";
-      wDetailText = `Điểm TBHK đạt ${gpa.toFixed(2)} vững vàng trên ngưỡng cảnh báo. Tiếp tục giữ vững phong độ học tập tốt!`;
-    }
-
-    if (elements.warningBadge) {
-      elements.warningBadge.textContent = wBadgeText;
-      elements.warningBadge.className = `badge-status ${wBadgeClass}`;
-    }
-    if (elements.warningDetail) {
-      elements.warningDetail.textContent = wDetailText;
-    }
-    if (elements.warningBox) {
-      if (isWarningDanger) {
-        elements.warningBox.classList.add("danger");
+    elements.btnPlusMenu.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = elements.geminiUploadMenu.style.display === "block";
+      if (isOpen) {
+        closeGeminiUploadMenu();
       } else {
-        elements.warningBox.classList.remove("danger");
+        openGeminiUploadMenu();
       }
-    }
-  }
+    });
 
-  function convertScore10() {
-    const s10 = parseFloat(elements.inputScore10?.value) || 0.0;
-    let gradeLetter = "F";
-    let grade4 = "0.0";
-    let rank = "Kém (Học lại)";
-    let rowId = "row-grade-f";
+    document.addEventListener("click", (e) => {
+      if (
+        elements.geminiUploadMenu &&
+        elements.geminiUploadMenu.style.display === "block" &&
+        !elements.geminiUploadMenu.contains(e.target) &&
+        !elements.btnPlusMenu.contains(e.target)
+      ) {
+        closeGeminiUploadMenu();
+      }
+    });
 
-    if (s10 >= 8.5) {
-      gradeLetter = "A"; grade4 = "4.0"; rank = "Giỏi / Xuất sắc"; rowId = "row-grade-a";
-    } else if (s10 >= 8.0) {
-      gradeLetter = "B+"; grade4 = "3.5"; rank = "Khá giỏi"; rowId = "row-grade-bp";
-    } else if (s10 >= 7.0) {
-      gradeLetter = "B"; grade4 = "3.0"; rank = "Khá"; rowId = "row-grade-b";
-    } else if (s10 >= 6.5) {
-      gradeLetter = "C+"; grade4 = "2.5"; rank = "Trung bình khá"; rowId = "row-grade-cp";
-    } else if (s10 >= 5.5) {
-      gradeLetter = "C"; grade4 = "2.0"; rank = "Trung bình"; rowId = "row-grade-c";
-    } else if (s10 >= 5.0) {
-      gradeLetter = "D+"; grade4 = "1.5"; rank = "Trung bình yếu"; rowId = "row-grade-dp";
-    } else if (s10 >= 4.0) {
-      gradeLetter = "D"; grade4 = "1.0"; rank = "Đạt (Tích lũy)"; rowId = "row-grade-d";
-    } else {
-      gradeLetter = "F"; grade4 = "0.0"; rank = "Không đạt (Học lại)"; rowId = "row-grade-f";
+    // 1. Document (.pdf, .txt)
+    if (elements.menuOptDoc && elements.menuInputDoc) {
+      elements.menuOptDoc.addEventListener("click", () => {
+        closeGeminiUploadMenu();
+        elements.menuInputDoc.click();
+      });
+      elements.menuInputDoc.addEventListener("change", (e) => {
+        if (e.target.files && e.target.files[0]) {
+          handleFileAttachmentSelected(e.target.files[0], "doc");
+        }
+      });
     }
 
-    if (elements.convertResultBadge) {
-      elements.convertResultBadge.textContent = `Điểm ${gradeLetter} (${grade4}) - ${rank}`;
+    // 2. Image / Scan OCR (.png, .jpg, .webp)
+    if (elements.menuOptImage && elements.menuInputImage) {
+      elements.menuOptImage.addEventListener("click", () => {
+        closeGeminiUploadMenu();
+        elements.menuInputImage.click();
+      });
+      elements.menuInputImage.addEventListener("change", (e) => {
+        if (e.target.files && e.target.files[0]) {
+          handleFileAttachmentSelected(e.target.files[0], "image");
+        }
+      });
     }
 
-    // Dynamic Row Highlight in Grade Reference Table
-    const allGradeRows = document.querySelectorAll(".mini-grade-table tbody tr");
-    allGradeRows.forEach((r) => r.classList.remove("highlight-grade-row"));
-    const targetRow = document.getElementById(rowId);
-    if (targetRow) {
-      targetRow.classList.add("highlight-grade-row");
+    // 3. Live Camera Scan
+    if (elements.menuOptCamera) {
+      elements.menuOptCamera.addEventListener("click", () => {
+        closeGeminiUploadMenu();
+        openCameraScannerModal();
+      });
     }
-  }
 
-  // =========================================================================
-  // Category Pills Quick Selection
-  // =========================================================================
-  function handleCategoryPillSelect(topic) {
-    const topicPrompts = {
-      scholarship: "Điều kiện xét học bổng khuyến khích học tập và điểm rèn luyện tại Đại học Nguyễn Trãi là gì?",
-      registration: "Quy định về đăng ký khối lượng tín chỉ tối thiểu tối đa và rút bớt học phần?",
-      warning: "Sinh viên bị cảnh báo học vụ khi điểm dưới bao nhiêu và mấy lần thì bị buộc thôi học?",
-      graduation: "Điều kiện để sinh viên được nhận đồ án tốt nghiệp và chuẩn đầu ra ngoại ngữ tin học?",
-      all: "",
-    };
-
-    const targetPrompt = topicPrompts[topic];
-    if (targetPrompt && elements.chatInput) {
-      elements.chatInput.value = targetPrompt;
-      elements.chatInput.focus();
-      handleSendMessage();
+    // 4. Video / Audio Lecture (.mp4, .webm, .mp3, .wav)
+    if (elements.menuOptMedia && elements.menuInputMedia) {
+      elements.menuOptMedia.addEventListener("click", () => {
+        closeGeminiUploadMenu();
+        elements.menuInputMedia.click();
+      });
+      elements.menuInputMedia.addEventListener("change", (e) => {
+        if (e.target.files && e.target.files[0]) {
+          handleFileAttachmentSelected(e.target.files[0], "media");
+        }
+      });
     }
-  }
 
-  // =========================================================================
-  // Document Upload & Management
-  // =========================================================================
-  async function refreshHealthStatus() {
-    try {
-      const health = await window.ApiService.checkHealth();
-      if (elements.statusDot && elements.statusText) {
-        if (health.status === "healthy") {
-          elements.statusDot.className = "status-dot online";
-          elements.statusText.textContent = "Hệ thống RAG sẵn sàng";
+    // 5. Voice Dictation Mode
+    if (elements.menuOptVoice) {
+      elements.menuOptVoice.addEventListener("click", () => {
+        closeGeminiUploadMenu();
+        if (window.VoiceManager) {
+          window.VoiceManager.toggleRecording(
+            (recognizedText) => {
+              if (elements.chatInput) {
+                elements.chatInput.value = recognizedText;
+                handleSendMessage();
+              }
+            },
+            (isRecording) => {
+              if (isRecording) {
+                elements.btnMic?.classList.add("recording");
+                showToast("Đang lắng nghe... Nói nội dung quy chế cần tra cứu.", "info", 3500);
+              } else {
+                elements.btnMic?.classList.remove("recording");
+              }
+            }
+          );
         } else {
-          elements.statusDot.className = "status-dot degraded";
-          elements.statusText.textContent = "Chế độ RAG suy giảm";
+          showToast("Trình duyệt không hỗ trợ Web Speech API.", "error");
         }
-      }
-    } catch {
-      if (elements.statusDot && elements.statusText) {
-        elements.statusDot.className = "status-dot offline";
-        elements.statusText.textContent = "Không thể kết nối máy chủ";
-      }
-    }
-  }
-
-  function handleFileSelected(file) {
-    state.selectedFile = file;
-    if (elements.dropzoneText) {
-      elements.dropzoneText.textContent = `Đã chọn: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
-    }
-    if (elements.btnUpload) {
-      elements.btnUpload.disabled = false;
-    }
-  }
-
-  async function handleDocumentUpload() {
-    if (!state.selectedFile && !state.selectedCameraFile) {
-      showToast("Vui lòng chọn tệp tài liệu hoặc chụp ảnh từ Camera.", "info");
-      return;
-    }
-
-    const title = elements.docTitleInput ? elements.docTitleInput.value.trim() : "";
-    elements.btnUpload.disabled = true;
-    elements.btnUpload.innerHTML = `<span>Đang xử lý & tạo Vector...</span>`;
-
-    try {
-      showToast("Đang bóc tách văn bản, OCR và tạo Vector...", "info", 6000);
-      let res;
-      if (state.selectedCameraFile) {
-        res = await window.ApiService.scanCameraDocument(state.selectedCameraFile, title);
-      } else {
-        res = await window.ApiService.uploadDocument(state.selectedFile, title);
-      }
-      showToast(`Nạp thành công! Đã lập chỉ mục ${res.total_chunks} đoạn trích.`, "success");
-
-      // Reset upload inputs
-      state.selectedFile = null;
-      state.selectedCameraFile = null;
-      if (elements.fileInput) elements.fileInput.value = "";
-      if (elements.smartphoneCameraInput) elements.smartphoneCameraInput.value = "";
-      if (elements.docTitleInput) elements.docTitleInput.value = "";
-      if (elements.dropzoneText) {
-        elements.dropzoneText.textContent = "Kéo thả PDF, Scan ảnh hoặc bấm để chọn";
-      }
-      if (elements.cameraPreviewBox) {
-        elements.cameraPreviewBox.style.display = "none";
-      }
-
-      // Refresh documents catalog
-      await loadDocuments();
-    } catch (err) {
-      showToast(`Lỗi nạp tài liệu: ${err.message}`, "error", 6000);
-    } finally {
-      if (elements.btnUpload) {
-        elements.btnUpload.disabled = false;
-        elements.btnUpload.innerHTML = `<span>Nạp vào Kho Tri thức</span>`;
-      }
-    }
-  }
-
-  async function loadDocuments() {
-    if (!elements.documentsList) return;
-
-    try {
-      const docs = await window.ApiService.getDocuments();
-      elements.documentsList.innerHTML = "";
-
-      if (!docs || docs.length === 0) {
-        elements.documentsList.innerHTML = `<div style="font-size:0.75rem; color:#64748b; padding:8px 0;">Chưa có tài liệu quy chế nào trong kho tri thức.</div>`;
-        return;
-      }
-
-      if (elements.docCountBadge) {
-        elements.docCountBadge.textContent = `${docs.length} tài liệu`;
-      }
-
-      docs.forEach((doc) => {
-        const item = document.createElement("div");
-        item.className = "doc-item";
-
-        const titleText = doc.title || doc.filename || "Quy chế";
-        const chunksCount = doc.total_chunks || 0;
-
-        item.innerHTML = `
-          <div class="doc-info" title="${escapeHtml(titleText)}">
-            <span class="doc-name">${escapeHtml(titleText)}</span>
-            <span class="doc-meta">
-              <span>${chunksCount} chunks</span>
-              <span>•</span>
-              <span>${doc.filename ? escapeHtml(doc.filename.slice(0, 18)) : "PDF"}</span>
-            </span>
-          </div>
-          <button class="btn-delete-doc" title="Xóa tài liệu này" data-docid="${doc.doc_id}">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/>
-            </svg>
-          </button>
-        `;
-
-        const deleteBtn = item.querySelector(".btn-delete-doc");
-        deleteBtn.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          const docId = deleteBtn.getAttribute("data-docid");
-          if (!confirm(`Bạn có chắc muốn xóa tài liệu này khỏi kho tri thức?`)) return;
-
-          try {
-            await window.ApiService.deleteDocument(docId);
-            showToast("Đã xóa tài liệu khỏi cơ sở tri thức.", "success");
-            await loadDocuments();
-          } catch (delErr) {
-            showToast(`Lỗi khi xóa: ${delErr.message}`, "error");
-          }
-        });
-
-        elements.documentsList.appendChild(item);
       });
-    } catch (e) {
-      console.warn("Could not load documents list:", e);
     }
+
+    // 6. GPA Calculator
+    if (elements.menuOptGpa) {
+      elements.menuOptGpa.addEventListener("click", () => {
+        closeGeminiUploadMenu();
+        openGpaCalcModal();
+      });
+    }
+  }
+
+  function openGeminiUploadMenu() {
+    if (!elements.geminiUploadMenu || !elements.btnPlusMenu) return;
+    elements.geminiUploadMenu.style.display = "block";
+    elements.btnPlusMenu.classList.add("open");
+    elements.btnPlusMenu.setAttribute("aria-expanded", "true");
+  }
+
+  function closeGeminiUploadMenu() {
+    if (!elements.geminiUploadMenu || !elements.btnPlusMenu) return;
+    elements.geminiUploadMenu.style.display = "none";
+    elements.btnPlusMenu.classList.remove("open");
+    elements.btnPlusMenu.setAttribute("aria-expanded", "false");
   }
 
   // =========================================================================
-  // Smartphone & Live Camera Document Scanner Logic
+  // Attachment Preview Bar Handling
   // =========================================================================
-  function setupCameraScannerEvents() {
-    // 1. Native Smartphone Camera Integration
-    if (elements.btnSmartphoneCamera && elements.smartphoneCameraInput) {
-      elements.btnSmartphoneCamera.addEventListener("click", () => {
-        elements.smartphoneCameraInput.click();
-      });
+  function setupAttachmentBarEvents() {
+    if (elements.btnCancelAttachment) {
+      elements.btnCancelAttachment.addEventListener("click", clearAttachmentBar);
     }
-
-    if (elements.smartphoneCameraInput) {
-      elements.smartphoneCameraInput.addEventListener("change", (e) => {
-        const file = e.target.files && e.target.files[0];
-        if (!file) return;
-
-        state.selectedCameraFile = file;
-        state.selectedFile = file;
-
-        // Display thumbnail preview
-        if (elements.cameraPreviewImg) {
-          elements.cameraPreviewImg.src = URL.createObjectURL(file);
-        }
-        if (elements.cameraPreviewName) {
-          elements.cameraPreviewName.textContent = file.name || "anh_camera_smartphone.jpg";
-        }
-        if (elements.cameraPreviewBox) {
-          elements.cameraPreviewBox.style.display = "flex";
-        }
-
-        // Auto-generate suggested document title
-        const dateStr = new Date().toLocaleString("vi-VN", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        if (elements.docTitleInput && !elements.docTitleInput.value) {
-          elements.docTitleInput.value = `Tài liệu Scan Camera - ${dateStr}`;
-        }
-
-        if (elements.dropzoneText) {
-          elements.dropzoneText.textContent = `Ảnh Camera: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
-        }
-        if (elements.btnUpload) {
-          elements.btnUpload.disabled = false;
-        }
-
-        showToast("Đã chụp ảnh từ Camera điện thoại. Nhấn 'Nạp vào Kho Tri thức' để OCR.", "success");
-      });
-    }
-
-    if (elements.btnCancelCamPreview) {
-      elements.btnCancelCamPreview.addEventListener("click", () => {
-        state.selectedCameraFile = null;
-        state.selectedFile = null;
-        if (elements.smartphoneCameraInput) elements.smartphoneCameraInput.value = "";
-        if (elements.cameraPreviewBox) elements.cameraPreviewBox.style.display = "none";
-        if (elements.dropzoneText) {
-          elements.dropzoneText.textContent = "Kéo thả PDF, Scan ảnh hoặc bấm để chọn";
-        }
-      });
-    }
-
-    // 2. Live Camera / Webcam Scanner Modal
-    if (elements.btnOpenLiveScanner) {
-      elements.btnOpenLiveScanner.addEventListener("click", openCameraScannerModal);
-    }
-    if (elements.btnTopbarCamera) {
-      elements.btnTopbarCamera.addEventListener("click", openCameraScannerModal);
-    }
-    if (elements.btnCloseScanner) {
-      elements.btnCloseScanner.addEventListener("click", closeCameraScannerModal);
-    }
-    if (elements.modalCameraScanner) {
-      elements.modalCameraScanner.addEventListener("click", (e) => {
-        if (e.target === elements.modalCameraScanner) {
-          closeCameraScannerModal();
-        }
-      });
-    }
-
-    // Camera Switch Front/Back
-    if (elements.btnSwitchCamera) {
-      elements.btnSwitchCamera.addEventListener("click", async () => {
-        state.cameraFacingMode = state.cameraFacingMode === "environment" ? "user" : "environment";
-        await startCameraStream();
-        showToast(
-          state.cameraFacingMode === "environment" ? "Đã chuyển Camera sau." : "Đã chuyển Camera trước.",
-          "info",
-          2000
-        );
-      });
-    }
-
-    // Capture Frame & Preview
-    if (elements.btnCaptureScan) {
-      elements.btnCaptureScan.addEventListener("click", handleCaptureFrame);
-    }
-
-    // Retake Scan
-    if (elements.btnRetakeScan) {
-      elements.btnRetakeScan.addEventListener("click", handleRetakeScan);
-    }
-
-    // Confirm & Upload Scan to MongoDB
-    if (elements.btnConfirmUploadScan) {
-      elements.btnConfirmUploadScan.addEventListener("click", handleConfirmUploadScan);
+    if (elements.btnUploadAttachment) {
+      elements.btnUploadAttachment.addEventListener("click", handleUploadAttachmentToVectorDB);
     }
   }
 
-  async function openCameraScannerModal() {
-    if (!elements.modalCameraScanner) return;
-    elements.modalCameraScanner.style.display = "flex";
-    elements.modalCameraScanner.setAttribute("aria-hidden", "false");
+  function handleFileAttachmentSelected(file, type = "doc") {
+    state.selectedAttachmentFile = file;
 
-    // Reset views
-    if (elements.scannerViewContainer) elements.scannerViewContainer.style.display = "flex";
-    if (elements.scannerSnapshotView) elements.scannerSnapshotView.style.display = "none";
-    if (elements.btnCaptureScan) elements.btnCaptureScan.style.display = "inline-flex";
-    if (elements.btnConfirmUploadScan) elements.btnConfirmUploadScan.style.display = "none";
-
-    // Set suggested title
-    const dateStr = new Date().toLocaleString("vi-VN", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    if (elements.scannerDocTitle) {
-      elements.scannerDocTitle.value = `Tài liệu Scan Live Camera - ${dateStr}`;
+    let icon = "📎";
+    if (type === "doc") {
+      icon = file.name.endsWith(".pdf") ? "📄" : "📝";
+    } else if (type === "image") {
+      icon = "🖼️";
+    } else if (type === "media") {
+      icon = file.name.match(/\.(mp4|webm)$/i) ? "🎬" : "🎵";
     }
 
-    await startCameraStream();
-  }
+    if (elements.attachmentIcon) elements.attachmentIcon.textContent = icon;
+    if (elements.attachmentName) elements.attachmentName.textContent = file.name;
 
-  function closeCameraScannerModal() {
-    stopCameraStream();
-    if (elements.modalCameraScanner) {
-      elements.modalCameraScanner.style.display = "none";
-      elements.modalCameraScanner.setAttribute("aria-hidden", "true");
+    const sizeKb = (file.size / 1024);
+    const sizeStr = sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(2)} MB` : `${sizeKb.toFixed(1)} KB`;
+    if (elements.attachmentSize) elements.attachmentSize.textContent = sizeStr;
+
+    if (elements.attachmentTitleInput) {
+      const baseName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+      elements.attachmentTitleInput.value = baseName;
     }
+
+    if (elements.chatAttachmentBar) {
+      elements.chatAttachmentBar.style.display = "flex";
+    }
+
+    showToast(`Đã đính kèm "${file.name}". Bấm 'Nạp ngay' để lập chỉ mục.`, "info", 3500);
   }
 
-  async function startCameraStream() {
-    stopCameraStream();
+  function clearAttachmentBar() {
+    state.selectedAttachmentFile = null;
+    if (elements.chatAttachmentBar) {
+      elements.chatAttachmentBar.style.display = "none";
+    }
+    if (elements.attachmentTitleInput) {
+      elements.attachmentTitleInput.value = "";
+    }
+    if (elements.menuInputDoc) elements.menuInputDoc.value = "";
+    if (elements.menuInputImage) elements.menuInputImage.value = "";
+    if (elements.menuInputMedia) elements.menuInputMedia.value = "";
+  }
 
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showToast("Trình duyệt không hỗ trợ WebRTC Camera trực tiếp. Vui lòng dùng nút 'Camera Điện thoại'.", "error", 6000);
+  async function handleUploadAttachmentToVectorDB() {
+    if (!state.selectedAttachmentFile) {
+      showToast("Vui lòng chọn tệp đính kèm.", "info");
       return;
     }
 
-    try {
-      const constraints = {
-        video: {
-          facingMode: { ideal: state.cameraFacingMode || "environment" },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-        audio: false,
-      };
+    const file = state.selectedAttachmentFile;
+    const title = elements.attachmentTitleInput ? elements.attachmentTitleInput.value.trim() : "";
+    const uploadBtn = elements.btnUploadAttachment;
 
-      let stream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch {
-        // Fallback without exact constraints
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      }
-
-      state.mediaStream = stream;
-      if (elements.cameraStream) {
-        elements.cameraStream.srcObject = stream;
-        elements.cameraStream.play().catch((err) => console.warn("Video play error:", err));
-      }
-    } catch (err) {
-      console.error("Camera access error:", err);
-      showToast(
-        "Không thể mở Camera (Có thể do chưa cấp quyền hoặc đang kết nối qua HTTP). Hãy dùng nút 'Camera Điện thoại' để chụp ảnh trực tiếp!",
-        "error",
-        6000
-      );
-    }
-  }
-
-  function stopCameraStream() {
-    if (state.mediaStream) {
-      try {
-        state.mediaStream.getTracks().forEach((track) => {
-          track.stop();
-        });
-      } catch (err) {
-        console.warn("Error stopping camera tracks:", err);
-      }
-      state.mediaStream = null;
-    }
-    if (elements.cameraStream) {
-      elements.cameraStream.srcObject = null;
-    }
-  }
-
-  function handleCaptureFrame() {
-    if (!elements.cameraStream || !elements.cameraCanvas) return;
-
-    const video = elements.cameraStream;
-    const canvas = elements.cameraCanvas;
-    const width = video.videoWidth || 1280;
-    const height = video.videoHeight || 720;
-
-    canvas.width = width;
-    canvas.height = height;
-
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0, width, height);
-
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          showToast("Không thể xuất ảnh từ camera canvas.", "error");
-          return;
-        }
-
-        state.capturedBlob = blob;
-
-        // Show captured snapshot preview
-        if (elements.scannerSnapshotImg) {
-          elements.scannerSnapshotImg.src = URL.createObjectURL(blob);
-        }
-        if (elements.scannerViewContainer) {
-          elements.scannerViewContainer.style.display = "none";
-        }
-        if (elements.scannerSnapshotView) {
-          elements.scannerSnapshotView.style.display = "flex";
-        }
-
-        // Toggle action buttons
-        if (elements.btnCaptureScan) elements.btnCaptureScan.style.display = "none";
-        if (elements.btnConfirmUploadScan) elements.btnConfirmUploadScan.style.display = "inline-flex";
-
-        // Stop camera hardware stream right after snapshot to save battery/privacy!
-        stopCameraStream();
-
-        showToast("Đã chụp khung hình văn bản! Kiểm tra ảnh và nhấn 'Nạp vào Kho Tri thức'.", "success");
-      },
-      "image/jpeg",
-      0.95
-    );
-  }
-
-  async function handleRetakeScan() {
-    state.capturedBlob = null;
-    if (elements.scannerSnapshotView) elements.scannerSnapshotView.style.display = "none";
-    if (elements.scannerViewContainer) elements.scannerViewContainer.style.display = "flex";
-    if (elements.btnConfirmUploadScan) elements.btnConfirmUploadScan.style.display = "none";
-    if (elements.btnCaptureScan) elements.btnCaptureScan.style.display = "inline-flex";
-
-    await startCameraStream();
-  }
-
-  async function handleConfirmUploadScan() {
-    if (!state.capturedBlob) {
-      showToast("Chưa có ảnh chụp tài liệu để nạp.", "info");
-      return;
-    }
-
-    const title = elements.scannerDocTitle ? elements.scannerDocTitle.value.trim() : "";
-    const uploadBtn = elements.btnConfirmUploadScan;
     uploadBtn.disabled = true;
-    uploadBtn.innerHTML = `<span>⏳ Đang nhận diện OCR & nạp...</span>`;
+    uploadBtn.innerHTML = `<span>⏳ Đang xử lý...</span>`;
 
     try {
-      showToast("Đang gửi ảnh lên máy chủ để xử lý OCR & Vector...", "info", 8000);
-      const res = await window.ApiService.scanCameraDocument(state.capturedBlob, title);
-      showToast(`Quét thành công! Đã trích xuất & lập chỉ mục ${res.total_chunks} đoạn quy chế.`, "success", 5000);
+      showToast(`Đang phân tích và nạp tệp "${file.name}" vào cơ sở tri thức...`, "info", 8000);
+      const res = await window.ApiService.uploadDocument(file, title);
+      showToast(`Nạp thành công! Đã trích xuất ${res.total_chunks || 0} đoạn quy chế.`, "success", 4500);
 
-      // Close modal and refresh doc catalog
-      closeCameraScannerModal();
+      clearAttachmentBar();
       await loadDocuments();
     } catch (err) {
-      showToast(`Lỗi khi quét tài liệu: ${err.message}`, "error", 7000);
+      showToast(`Lỗi khi nạp tệp: ${err.message}`, "error", 6000);
     } finally {
-      uploadBtn.disabled = false;
-      uploadBtn.innerHTML = `<span>🚀 Nạp vào Kho Tri thức</span>`;
+      if (uploadBtn) {
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = `<span>🚀 Nạp ngay</span>`;
+      }
     }
   }
 
   // =========================================================================
-  // Chat History Loader
+  // Chat Sessions History (Sidebar: Single-Line Titles Only)
   // =========================================================================
-  async function loadChatHistory() {
+  async function loadSessionsList() {
+    if (!elements.chatSessionsList) return;
+
     try {
-      const history = await window.ApiService.getChatHistory(state.sessionId);
+      const data = await window.ApiService.getSessions(50);
+      const sessions = data.sessions || [];
+      state.sessionsList = sessions;
+
+      const pinnedSessions = sessions.filter((s) => s.is_pinned);
+      const recentSessions = sessions.filter((s) => !s.is_pinned);
+
+      // 1. Render Pinned Group
+      if (elements.sessionsPinnedGroup && elements.sessionsPinnedList) {
+        if (pinnedSessions.length > 0) {
+          elements.sessionsPinnedGroup.style.display = "block";
+          elements.sessionsPinnedList.innerHTML = "";
+          pinnedSessions.forEach((s) => {
+            elements.sessionsPinnedList.appendChild(createSessionItemElement(s));
+          });
+        } else {
+          elements.sessionsPinnedGroup.style.display = "none";
+          elements.sessionsPinnedList.innerHTML = "";
+        }
+      }
+
+      // 2. Render Recent Group
+      if (elements.sessionsRecentGroup && elements.sessionsRecentList) {
+        elements.sessionsRecentList.innerHTML = "";
+        if (recentSessions.length > 0) {
+          recentSessions.forEach((s) => {
+            elements.sessionsRecentList.appendChild(createSessionItemElement(s));
+          });
+        } else if (pinnedSessions.length === 0) {
+          elements.sessionsRecentList.innerHTML = `<div class="empty-sessions-hint">Chưa có lịch sử cuộc trò chuyện</div>`;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not load sessions list:", err);
+    }
+  }
+
+  function createSessionItemElement(session) {
+    const item = document.createElement("div");
+    item.className = `session-item ${session.session_id === state.sessionId ? "active" : ""}`;
+    item.setAttribute("data-session-id", session.session_id);
+
+    const titleText = session.title || "Cuộc trò chuyện mới";
+
+    // ULTRA-MINIMALIST SINGLE LINE (No subtext, no timestamps, no bubble icons)
+    item.innerHTML = `
+      <span class="session-title" title="${escapeHtml(titleText)}">${escapeHtml(titleText)}</span>
+      <div class="session-actions">
+        <button type="button" class="btn-session-action btn-pin-session ${session.is_pinned ? 'is-pinned' : ''}" title="${session.is_pinned ? 'Bỏ ghim' : 'Ghim lên đầu'}">
+          📌
+        </button>
+        <button type="button" class="btn-session-action btn-rename-session" title="Đổi tên cuộc trò chuyện">
+          ✏️
+        </button>
+        <button type="button" class="btn-session-action btn-word-session" title="Xuất file Word (.doc)">
+          📄
+        </button>
+        <button type="button" class="btn-session-action btn-delete-session" title="Xóa cuộc trò chuyện này">
+          🗑️
+        </button>
+      </div>
+    `;
+
+    // Click item to switch conversation
+    item.addEventListener("click", () => {
+      switchSession(session.session_id);
+    });
+
+    // Action: Pin / Unpin
+    const btnPin = item.querySelector(".btn-pin-session");
+    btnPin.addEventListener("click", (e) => {
+      e.stopPropagation();
+      togglePinSession(session.session_id, !session.is_pinned);
+    });
+
+    // Action: Rename
+    const btnRename = item.querySelector(".btn-rename-session");
+    btnRename.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openRenameModal(session.session_id, session.title);
+    });
+
+    // Action: Word Export
+    const btnWord = item.querySelector(".btn-word-session");
+    btnWord.addEventListener("click", (e) => {
+      e.stopPropagation();
+      exportWordForSession(session.session_id);
+    });
+
+    // Action: Delete
+    const btnDelete = item.querySelector(".btn-delete-session");
+    btnDelete.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteSession(session.session_id);
+    });
+
+    return item;
+  }
+
+  async function switchSession(targetSessionId) {
+    state.sessionId = targetSessionId;
+    localStorage.setItem("ntu_edubot_session_id", targetSessionId);
+
+    // Update active highlight in sidebar
+    if (elements.btnNewChat) {
+      elements.btnNewChat.classList.remove("active-nav");
+    }
+    document.querySelectorAll(".session-item").forEach((el) => {
+      if (el.getAttribute("data-session-id") === targetSessionId) {
+        el.classList.add("active");
+      } else {
+        el.classList.remove("active");
+      }
+    });
+
+    // Clear current chat display
+    if (elements.chatMessages) {
+      elements.chatMessages.innerHTML = "";
+    }
+
+    try {
+      const history = await window.ApiService.getChatHistory(targetSessionId);
       if (history && history.messages && history.messages.length > 0) {
-        if (elements.welcomeScreen && elements.welcomeScreen.parentNode) {
-          elements.welcomeScreen.remove();
+        // Exit Home Mode -> Active Chat Mode
+        if (elements.mainChat) {
+          elements.mainChat.classList.remove("home-mode");
+        }
+
+        // Show Word Export Button in Topbar
+        if (elements.btnExportWordTopbar) {
+          elements.btnExportWordTopbar.style.display = "inline-flex";
         }
 
         history.messages.forEach((msg) => {
           renderMessageBubble(msg.role, msg.content, msg.sources);
         });
-
         scrollToBottom();
+      } else {
+        // Empty session -> Return to Home Mode
+        if (elements.mainChat) {
+          elements.mainChat.classList.add("home-mode");
+        }
+        if (elements.btnExportWordTopbar) {
+          elements.btnExportWordTopbar.style.display = "none";
+        }
       }
     } catch (e) {
-      console.warn("Could not load past chat history:", e);
+      console.warn("Could not switch to session:", e);
+      showToast("Không thể tải tin nhắn của phiên này.", "error");
+    }
+  }
+
+  async function togglePinSession(sessionId, newPinnedState) {
+    try {
+      await window.ApiService.updateSession(sessionId, { is_pinned: newPinnedState });
+      showToast(newPinnedState ? "Đã ghim cuộc trò chuyện lên đầu." : "Đã bỏ ghim cuộc trò chuyện.", "success", 2000);
+      await loadSessionsList();
+    } catch (err) {
+      showToast(`Không thể thay đổi ghim: ${err.message}`, "error");
+    }
+  }
+
+  function exportWordForSession(sessionId) {
+    try {
+      showToast("Đang kết xuất và tải về file Word (.doc)...", "info", 3000);
+      window.ApiService.exportSessionWord(sessionId);
+    } catch (err) {
+      showToast(`Lỗi xuất file Word: ${err.message}`, "error");
+    }
+  }
+
+  async function deleteSession(sessionId) {
+    if (!confirm("Bạn có chắc muốn xóa vĩnh viễn cuộc trò chuyện này cùng toàn bộ tin nhắn?")) return;
+
+    try {
+      await window.ApiService.deleteChatHistory(sessionId);
+      showToast("Đã xóa cuộc trò chuyện thành công.", "info", 2000);
+
+      if (state.sessionId === sessionId) {
+        startNewChatSession(false);
+      }
+      await loadSessionsList();
+    } catch (err) {
+      showToast(`Lỗi khi xóa cuộc trò chuyện: ${err.message}`, "error");
     }
   }
 
@@ -1177,20 +856,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
     state.currentQuestion = question;
 
-    // Reset input box
+    // Reset input box height
     elements.chatInput.value = "";
     elements.chatInput.style.height = "auto";
 
-    // Hide welcome card if present
-    if (elements.welcomeScreen && elements.welcomeScreen.parentNode) {
-      elements.welcomeScreen.remove();
+    // 1. Transition immediately from Home Mode to Active Chat Mode!
+    if (elements.mainChat) {
+      elements.mainChat.classList.remove("home-mode");
     }
 
-    // 1. Render User message bubble
+    // 2. Render User message bubble
     renderMessageBubble("user", question);
     scrollToBottom();
 
-    // 2. Prepare Bot response container
+    // 3. Prepare Bot response placeholder
     state.isProcessing = true;
     elements.btnSend.disabled = true;
 
@@ -1200,7 +879,6 @@ document.addEventListener("DOMContentLoaded", () => {
     let fullAnswer = "";
     let accumulatedSources = [];
 
-    // Helper: Safely and permanently remove typing dots
     const removeTypingDots = () => {
       if (botMsgElements.typingIndicator && botMsgElements.typingIndicator.parentNode) {
         botMsgElements.typingIndicator.remove();
@@ -1208,7 +886,7 @@ document.addEventListener("DOMContentLoaded", () => {
       botMsgElements.bubble.querySelectorAll(".typing-indicator").forEach((el) => el.remove());
     };
 
-    // 3. Initiate SSE Streaming
+    // 4. Initiate SSE Streaming
     await window.ApiService.streamChat(state.sessionId, question, state.topK, {
       onSources: (sources) => {
         accumulatedSources = sources || [];
@@ -1216,16 +894,13 @@ document.addEventListener("DOMContentLoaded", () => {
         scrollToBottom();
       },
       onToken: (token) => {
-        // Crucial fix: Remove typing dots immediately on first token
         removeTypingDots();
-
         fullAnswer += token;
         botMsgElements.contentBox.innerHTML = formatMarkdown(fullAnswer);
         botMsgElements.contentBox.appendChild(botMsgElements.cursor);
         scrollToBottom();
       },
       onDone: () => {
-        // Remove typing dots and blinking cursor
         removeTypingDots();
         if (botMsgElements.cursor) {
           botMsgElements.cursor.remove();
@@ -1237,6 +912,11 @@ document.addEventListener("DOMContentLoaded", () => {
         // Add 3 Dynamic Follow-up Question Chips
         attachFollowupChips(botMsgElements.followupContainer, question, fullAnswer);
 
+        // Show Word Export button in Topbar
+        if (elements.btnExportWordTopbar) {
+          elements.btnExportWordTopbar.style.display = "inline-flex";
+        }
+
         // Auto-TTS if enabled
         if (state.autoTTS && window.VoiceManager) {
           window.VoiceManager.speak(fullAnswer);
@@ -1246,6 +926,9 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.btnSend.disabled = false;
         elements.chatInput.focus();
         scrollToBottom();
+
+        // Refresh Sidebar Sessions List
+        loadSessionsList();
       },
       onError: (err) => {
         removeTypingDots();
@@ -1270,7 +953,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (role === "user") {
       row.innerHTML = `
-        <div class="avatar user-avatar">SV</div>
         <div class="bubble">${escapeHtml(content).replace(/\n/g, "<br>")}</div>
       `;
     } else {
@@ -1282,20 +964,17 @@ document.addEventListener("DOMContentLoaded", () => {
       contentDiv.innerHTML = formatMarkdown(content);
       bubble.appendChild(contentDiv);
 
-      // Sources citation card
       if (sources && sources.length > 0) {
         const sourcesDiv = document.createElement("div");
         renderSourcesCard(sourcesDiv, sources, content);
         bubble.appendChild(sourcesDiv);
       }
 
-      // Actions (Copy, TTS)
       const actionsDiv = document.createElement("div");
       actionsDiv.className = "message-actions";
       attachMessageActions(actionsDiv, content, "");
       bubble.appendChild(actionsDiv);
 
-      // Follow-up chips
       const followupDiv = document.createElement("div");
       followupDiv.className = "followup-container";
       attachFollowupChips(followupDiv, "", content);
@@ -1303,7 +982,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       row.innerHTML = `
         <div class="avatar bot-avatar">
-          <img src="/assets/ntu-logo.svg" alt="NTU EduBot">
+          <img src="/assets/ntu-logo.svg" alt="NTU Logo">
         </div>
       `;
       row.appendChild(bubble);
@@ -1348,7 +1027,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     row.innerHTML = `
       <div class="avatar bot-avatar">
-        <img src="/assets/ntu-logo.svg" alt="NTU EduBot">
+        <img src="/assets/ntu-logo.svg" alt="NTU Logo">
       </div>
     `;
     row.appendChild(bubble);
@@ -1377,7 +1056,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/>
           <path d="M7 7h.01"/>
         </svg>
-        <span>Căn cứ pháp lý trích dẫn (${sources.length} tài liệu - Bấm để xem nguyên văn)</span>
+        <span>Căn cứ pháp lý trích dẫn (${sources.length} tài liệu)</span>
       </div>
       <div class="sources-list">
         ${sources
@@ -1391,21 +1070,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
             return `
               <div class="source-item" data-index="${idx}" title="Bấm để xem nguyên văn căn cứ pháp lý">
-                <div class="source-badge-wrap">
-                  <span class="source-article-badge">${escapeHtml(articleBadge)}</span>
-                </div>
-                <div class="source-content-wrap">
-                  <div class="source-title-line" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</div>
-                  <div class="source-meter-wrap">
-                    <div class="source-progress-bar">
-                      <div class="source-progress-fill" style="width: ${scorePercent}%"></div>
-                    </div>
-                    <span class="source-score-text">${scorePercent}% tin cậy</span>
+                <span class="source-article-badge">${escapeHtml(articleBadge)}</span>
+                <span class="source-title-line" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</span>
+                <div class="source-meter-wrap">
+                  <div class="source-progress-bar">
+                    <div class="source-progress-fill" style="width: ${scorePercent}%"></div>
                   </div>
+                  <span class="source-score-text">${scorePercent}%</span>
                 </div>
-                <div class="source-action-wrap">
-                  <span class="btn-source-view">Xem nguyên văn ➔</span>
-                </div>
+                <span class="btn-source-view">Xem ➔</span>
               </div>
             `;
           })
@@ -1413,7 +1086,6 @@ document.addEventListener("DOMContentLoaded", () => {
       </div>
     `;
 
-    // Attach click listeners to all source items to open Citation Preview Modal
     const sourceElements = container.querySelectorAll(".source-item");
     sourceElements.forEach((el) => {
       el.addEventListener("click", () => {
@@ -1425,16 +1097,13 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // =========================================================================
-  // Message Actions: Copy, TTS & Follow-up Chips
-  // =========================================================================
   function attachMessageActions(container, text, question) {
     container.innerHTML = "";
 
-    // 1. Copy Answer Button
+    // 1. Copy Button
     const btnCopy = document.createElement("button");
     btnCopy.type = "button";
-    btnCopy.className = "btn-msg-action btn-copy-msg";
+    btnCopy.className = "btn-msg-action";
     btnCopy.innerHTML = `
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -1444,14 +1113,11 @@ document.addEventListener("DOMContentLoaded", () => {
     `;
 
     btnCopy.addEventListener("click", () => {
-      // Strip markdown syntax for clean copying
       const plainText = text.replace(/[*_#`>]/g, "").trim();
       navigator.clipboard.writeText(plainText).then(() => {
-        btnCopy.classList.add("copied");
-        btnCopy.querySelector("span").textContent = "Đã sao chép";
+        btnCopy.querySelector("span").textContent = "Đã chép";
         showToast("Đã sao chép câu trả lời vào clipboard!", "success");
         setTimeout(() => {
-          btnCopy.classList.remove("copied");
           btnCopy.querySelector("span").textContent = "Sao chép";
         }, 2500);
       }).catch(() => {
@@ -1460,10 +1126,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     container.appendChild(btnCopy);
 
-    // 2. Text-to-Speech (TTS) Button
+    // 2. TTS Button
     const btnTTS = document.createElement("button");
     btnTTS.type = "button";
-    btnTTS.className = "btn-msg-action btn-tts";
+    btnTTS.className = "btn-msg-action";
     btnTTS.innerHTML = `
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
@@ -1477,16 +1143,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (window.VoiceManager.isSpeaking()) {
         window.VoiceManager.stopSpeaking();
-        btnTTS.classList.remove("speaking");
         btnTTS.querySelector("span").textContent = "Nghe đọc";
       } else {
-        btnTTS.classList.add("speaking");
         btnTTS.querySelector("span").textContent = "Đang đọc...";
         window.VoiceManager.speak(
           text,
           () => {},
           () => {
-            btnTTS.classList.remove("speaking");
             btnTTS.querySelector("span").textContent = "Nghe đọc";
           }
         );
@@ -1497,7 +1160,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function attachFollowupChips(container, question, answer) {
     container.innerHTML = "";
-
     const chips = generateFollowupQuestions(question, answer);
     if (!chips || chips.length === 0) return;
 
@@ -1535,8 +1197,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function generateFollowupQuestions(question, answer) {
     const combined = `${question} ${answer}`.toLowerCase();
 
-    // 1. Scholarship & Conduct
-    if (combined.includes("học bổng") || combined.includes("rèn luyện") || combined.includes("điều 9") || combined.includes("điều 10") || combined.includes("điều 12") || combined.includes("điều 13")) {
+    if (combined.includes("học bổng") || combined.includes("rèn luyện") || combined.includes("điều 12") || combined.includes("điều 13")) {
       return [
         "Học bổng Xuất sắc được hỗ trợ bao nhiêu % học phí?",
         "Điểm rèn luyện từ bao nhiêu điểm thì đủ điều kiện học bổng?",
@@ -1544,8 +1205,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ];
     }
 
-    // 2. Warning & Expulsion
-    if (combined.includes("cảnh báo") || combined.includes("buộc thôi học") || combined.includes("điều 7") || combined.includes("điều 8")) {
+    if (combined.includes("cảnh báo") || combined.includes("buộc thôi học") || combined.includes("điều 7")) {
       return [
         "Bị cảnh báo học vụ mấy lần liên tiếp thì bị buộc thôi học?",
         "Sinh viên bị cảnh báo học vụ được đăng ký tối đa bao nhiêu tín chỉ?",
@@ -1553,8 +1213,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ];
     }
 
-    // 3. Retake & Improvement
-    if (combined.includes("học lại") || combined.includes("cải thiện") || combined.includes("điểm f") || combined.includes("điều 5") || combined.includes("điều 6")) {
+    if (combined.includes("học lại") || combined.includes("cải thiện") || combined.includes("điểm f")) {
       return [
         "Học phần bị điểm F có bắt buộc phải đăng ký học lại không?",
         "Điểm C có được đăng ký học cải thiện điểm không?",
@@ -1562,8 +1221,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ];
     }
 
-    // 4. Graduation & Thesis
-    if (combined.includes("tốt nghiệp") || combined.includes("đồ án") || combined.includes("khóa luận") || combined.includes("chuẩn đầu ra") || combined.includes("điều 14") || combined.includes("điều 15") || combined.includes("điều 16")) {
+    if (combined.includes("tốt nghiệp") || combined.includes("đồ án") || combined.includes("khóa luận")) {
       return [
         "Điều kiện về số tín chỉ tích lũy để được làm đồ án tốt nghiệp?",
         "Chuẩn đầu ra Ngoại ngữ (tiếng Anh) tốt nghiệp NTU yêu cầu gì?",
@@ -1571,25 +1229,6 @@ document.addEventListener("DOMContentLoaded", () => {
       ];
     }
 
-    // 5. Tuition & Academic Leave
-    if (combined.includes("học phí") || combined.includes("bảo lưu") || combined.includes("nghỉ học") || combined.includes("tạm thời")) {
-      return [
-        "Thời hạn đóng học phí và thủ tục xin gia hạn học phí?",
-        "Thời gian nghỉ học tạm thời và bảo lưu kết quả tối đa mấy kỳ?",
-        "Thủ tục xin trở lại học tập sau khi hết thời gian bảo lưu?",
-      ];
-    }
-
-    // 6. NTU General Introduction
-    if (combined.includes("nguyễn trãi") || combined.includes("ntu") || combined.includes("giới thiệu") || combined.includes("khoa")) {
-      return [
-        "Trường Đại học Nguyễn Trãi có những ngành đào tạo mũi nhọn nào?",
-        "Mô hình Đại học Ứng dụng tại NTU có những ưu điểm gì nổi bật?",
-        "Địa chỉ trụ sở chính và các kênh hỗ trợ sinh viên của NTU?",
-      ];
-    }
-
-    // Default Fallback Chips
     return [
       "Điều kiện xét học bổng khuyến khích học tập tại NTU?",
       "Sinh viên bị cảnh báo học vụ khi điểm TBHK dưới bao nhiêu?",
@@ -1604,7 +1243,664 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // =========================================================================
-  // Lightweight & Secure Markdown Parser with Legal Badge Highlighting
+  // Modal 5: Regulation Documents Library (Thư viện Quy chế NTU)
+  // =========================================================================
+  function setupDocsLibraryModalEvents() {
+    if (elements.btnCloseDocsModal) {
+      elements.btnCloseDocsModal.addEventListener("click", closeDocsLibraryModal);
+    }
+    if (elements.btnDismissDocsModal) {
+      elements.btnDismissDocsModal.addEventListener("click", closeDocsLibraryModal);
+    }
+    if (elements.modalDocsLibrary) {
+      elements.modalDocsLibrary.addEventListener("click", (e) => {
+        if (e.target === elements.modalDocsLibrary) closeDocsLibraryModal();
+      });
+    }
+
+    // Choose File Button
+    if (elements.btnChooseFileModal && elements.fileInput) {
+      elements.btnChooseFileModal.addEventListener("click", () => {
+        elements.fileInput.click();
+      });
+    }
+
+    // File Input Change
+    if (elements.fileInput) {
+      elements.fileInput.addEventListener("change", (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (file) {
+          state.selectedFile = file;
+          if (elements.dropzoneText) {
+            elements.dropzoneText.textContent = `Đã chọn: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+          }
+          if (elements.docTitleInput && !elements.docTitleInput.value) {
+            elements.docTitleInput.value = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+          }
+          if (elements.btnUpload) elements.btnUpload.disabled = false;
+        }
+      });
+    }
+
+    // Upload Button inside Modal
+    if (elements.btnUpload) {
+      elements.btnUpload.addEventListener("click", handleModalDocumentUpload);
+    }
+  }
+
+  function openDocsLibraryModal() {
+    if (elements.modalDocsLibrary) {
+      elements.modalDocsLibrary.style.display = "flex";
+      elements.modalDocsLibrary.setAttribute("aria-hidden", "false");
+      loadDocuments();
+    }
+  }
+
+  function closeDocsLibraryModal() {
+    if (elements.modalDocsLibrary) {
+      elements.modalDocsLibrary.style.display = "none";
+      elements.modalDocsLibrary.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  async function handleModalDocumentUpload() {
+    if (!state.selectedFile) {
+      showToast("Vui lòng chọn tệp tài liệu trước.", "info");
+      return;
+    }
+
+    const title = elements.docTitleInput ? elements.docTitleInput.value.trim() : "";
+    const uploadBtn = elements.btnUpload;
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = `<span>⏳ Đang xử lý...</span>`;
+
+    try {
+      showToast(`Đang phân tích và nạp tệp "${state.selectedFile.name}"...`, "info", 8000);
+      const res = await window.ApiService.uploadDocument(state.selectedFile, title);
+      showToast(`Nạp thành công! Đã trích xuất ${res.total_chunks || 0} đoạn trích.`, "success");
+
+      state.selectedFile = null;
+      if (elements.fileInput) elements.fileInput.value = "";
+      if (elements.docTitleInput) elements.docTitleInput.value = "";
+      if (elements.dropzoneText) elements.dropzoneText.textContent = "Hỗ trợ PDF, Text, Ảnh Scan OCR hoặc Video/Audio bài giảng.";
+
+      await loadDocuments();
+    } catch (err) {
+      showToast(`Lỗi nạp tài liệu: ${err.message}`, "error", 6000);
+    } finally {
+      uploadBtn.disabled = false;
+      uploadBtn.innerHTML = `<span>🚀 Nạp vào Kho Tri thức</span>`;
+    }
+  }
+
+  async function loadDocuments() {
+    if (!elements.documentsList) return;
+
+    try {
+      const docs = await window.ApiService.getDocuments();
+      elements.documentsList.innerHTML = "";
+
+      if (!docs || docs.length === 0) {
+        elements.documentsList.innerHTML = `<div style="font-size:0.85rem; color:#8e918f; padding:16px 0; text-align:center;">Chưa có tài liệu quy chế nào trong kho tri thức.</div>`;
+        if (elements.docCountBadge) elements.docCountBadge.textContent = "0";
+        return;
+      }
+
+      if (elements.docCountBadge) {
+        elements.docCountBadge.textContent = `${docs.length}`;
+      }
+
+      docs.forEach((doc) => {
+        const item = document.createElement("div");
+        item.className = "doc-item";
+
+        const titleText = doc.title || doc.filename || "Quy chế";
+        const chunksCount = doc.total_chunks || 0;
+
+        item.innerHTML = `
+          <div class="doc-info" title="${escapeHtml(titleText)}">
+            <span class="doc-name">${escapeHtml(titleText)}</span>
+            <span class="doc-meta">
+              <span>${chunksCount} chunks</span>
+              <span>•</span>
+              <span>${doc.filename ? escapeHtml(doc.filename.slice(0, 24)) : "PDF"}</span>
+            </span>
+          </div>
+          <button class="btn-delete-doc" title="Xóa tài liệu này" data-docid="${doc.doc_id}">
+            🗑️
+          </button>
+        `;
+
+        const deleteBtn = item.querySelector(".btn-delete-doc");
+        deleteBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const docId = deleteBtn.getAttribute("data-docid");
+          if (!confirm(`Bạn có chắc muốn xóa tài liệu này khỏi kho tri thức?`)) return;
+
+          try {
+            await window.ApiService.deleteDocument(docId);
+            showToast("Đã xóa tài liệu khỏi cơ sở tri thức.", "success");
+            await loadDocuments();
+          } catch (delErr) {
+            showToast(`Lỗi khi xóa: ${delErr.message}`, "error");
+          }
+        });
+
+        elements.documentsList.appendChild(item);
+      });
+    } catch (e) {
+      console.warn("Could not load documents list:", e);
+    }
+  }
+
+  // =========================================================================
+  // Citation Modal Logic
+  // =========================================================================
+  function setupCitationModalEvents() {
+    if (elements.btnCloseCitation) elements.btnCloseCitation.addEventListener("click", closeCitationModal);
+    if (elements.btnDismissCitation) elements.btnDismissCitation.addEventListener("click", closeCitationModal);
+    if (elements.modalCitation) {
+      elements.modalCitation.addEventListener("click", (e) => {
+        if (e.target === elements.modalCitation) closeCitationModal();
+      });
+    }
+
+    if (elements.btnCopyCitation) {
+      elements.btnCopyCitation.addEventListener("click", () => {
+        if (!state.activeCitation) return;
+        const c = state.activeCitation;
+        const textToCopy = `[CĂN CỨ PHÁP LÝ TRÍCH DẪN - ĐẠI HỌC NGUYỄN TRÃI]\n` +
+          `Văn bản: ${c.title || c.doc_title || "Quy chế Đào tạo NTU"}\n` +
+          `Điều/Khoản: ${c.article || ""}${c.clause ? " - " + c.clause : ""}\n` +
+          `Độ tin cậy: ${c.score ? (c.score * 100).toFixed(1) + "%" : "Cao"}\n\n` +
+          `NỘI DUNG NGUYÊN VĂN:\n${c.content || ""}`;
+
+        navigator.clipboard.writeText(textToCopy).then(() => {
+          showToast("Đã sao chép trích dẫn căn cứ vào clipboard!", "success");
+        }).catch(() => {
+          showToast("Không thể sao chép vào clipboard.", "error");
+        });
+      });
+    }
+  }
+
+  function openCitationModal(sourceItem, queryText = "") {
+    state.activeCitation = sourceItem;
+
+    if (elements.citationDocTitle) {
+      elements.citationDocTitle.textContent = sourceItem.title || sourceItem.doc_title || "Quy chế Đào tạo trình độ Đại học - NTU";
+    }
+
+    const locText = [sourceItem.article, sourceItem.clause].filter(Boolean).join(" - ");
+    if (elements.citationLocation) {
+      elements.citationLocation.textContent = locText ? `Căn cứ: ${locText}` : "Căn cứ pháp lý trích dẫn";
+    }
+
+    if (elements.citationScore) {
+      const scoreNum = sourceItem.score ? Number(sourceItem.score) : 0.85;
+      elements.citationScore.textContent = `Độ tin cậy: ${(scoreNum * 100).toFixed(1)}%`;
+    }
+
+    if (elements.citationFilename) {
+      elements.citationFilename.textContent = sourceItem.filename || "quy_che_dao_tao_ntu.txt";
+    }
+
+    if (elements.citationContent) {
+      const rawContent = sourceItem.content || "(Không có nội dung nguyên văn trích xuất)";
+      elements.citationContent.innerHTML = highlightKeywordsInText(rawContent, queryText || state.currentQuestion);
+    }
+
+    if (elements.modalCitation) {
+      elements.modalCitation.style.display = "flex";
+      elements.modalCitation.setAttribute("aria-hidden", "false");
+    }
+  }
+
+  function closeCitationModal() {
+    if (elements.modalCitation) {
+      elements.modalCitation.style.display = "none";
+      elements.modalCitation.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function highlightKeywordsInText(text, query) {
+    if (!text) return "";
+    let safe = escapeHtml(text);
+    if (!query) return safe;
+
+    const tokens = query
+      .toLowerCase()
+      .split(/[\s,?\.\!]+/)
+      .filter((w) => w.length > 2 && !["sinh", "viên", "trường", "được", "không", "cho", "của", "và"].includes(w));
+
+    tokens.forEach((token) => {
+      try {
+        const regex = new RegExp(`(${token})`, "gi");
+        safe = safe.replace(regex, '<span class="badge-legal">$1</span>');
+      } catch {
+        // Ignore
+      }
+    });
+
+    return safe;
+  }
+
+  // =========================================================================
+  // GPA & Scholarship Calculator Logic
+  // =========================================================================
+  function setupGpaCalculatorEvents() {
+    if (elements.btnCloseGpaCalc) elements.btnCloseGpaCalc.addEventListener("click", closeGpaCalcModal);
+    if (elements.btnDismissGpaCalc) elements.btnDismissGpaCalc.addEventListener("click", closeGpaCalcModal);
+    if (elements.modalGpaCalc) {
+      elements.modalGpaCalc.addEventListener("click", (e) => {
+        if (e.target === elements.modalGpaCalc) closeGpaCalcModal();
+      });
+    }
+
+    const calcInputs = [
+      elements.inputCalcGpa,
+      elements.inputCalcDrl,
+      elements.inputCalcCredits,
+      elements.selectCalcYear,
+      elements.checkHasFail,
+    ];
+    calcInputs.forEach((input) => {
+      if (input) {
+        input.addEventListener("input", calculateGpaAndScholarship);
+        input.addEventListener("change", calculateGpaAndScholarship);
+      }
+    });
+
+    if (elements.inputScore10) {
+      elements.inputScore10.addEventListener("input", convertScore10);
+    }
+  }
+
+  function openGpaCalcModal() {
+    if (elements.modalGpaCalc) {
+      elements.modalGpaCalc.style.display = "flex";
+      elements.modalGpaCalc.setAttribute("aria-hidden", "false");
+      calculateGpaAndScholarship();
+      convertScore10();
+    }
+  }
+
+  function closeGpaCalcModal() {
+    if (elements.modalGpaCalc) {
+      elements.modalGpaCalc.style.display = "none";
+      elements.modalGpaCalc.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function calculateGpaAndScholarship() {
+    const gpa = parseFloat(elements.inputCalcGpa?.value) || 0.0;
+    const drl = parseInt(elements.inputCalcDrl?.value, 10) || 0;
+    const credits = parseInt(elements.inputCalcCredits?.value, 10) || 0;
+    const year = parseInt(elements.selectCalcYear?.value, 10) || 1;
+    const hasFail = elements.checkHasFail ? elements.checkHasFail.checked : false;
+
+    // Evaluate Scholarship
+    let sBadgeText = "Chưa đạt";
+    let sBadgeClass = "status-none";
+    let sDetailText = "";
+
+    if (credits < 15) {
+      sBadgeText = "Không đủ điều kiện";
+      sBadgeClass = "status-none";
+      sDetailText = `Khối lượng tín chỉ (${credits} TC) chưa đạt mức tối thiểu 15 tín chỉ theo Khoản 2 Điều 12.`;
+    } else if (hasFail) {
+      sBadgeText = "Không đủ điều kiện";
+      sBadgeClass = "status-none";
+      sDetailText = `Không xét cấp học bổng do có môn điểm dưới C (D+, D, F) hoặc thi lại theo Điểm c Khoản 2 Điều 12.`;
+    } else if (gpa >= 3.60 && drl >= 90) {
+      sBadgeText = "Học bổng Xuất sắc";
+      sBadgeClass = "status-excellent";
+      sDetailText = `Đủ điều kiện xét cấp Học bổng loại Xuất sắc (Thưởng bằng 120% học phí kỳ theo Điều 13 NTU).`;
+    } else if (gpa >= 3.20 && drl >= 80) {
+      sBadgeText = "Học bổng Giỏi";
+      sBadgeClass = "status-good";
+      sDetailText = `Đủ điều kiện xét cấp Học bổng loại Giỏi (Thưởng bằng 100% học phí kỳ theo Điều 13 NTU).`;
+    } else if (gpa >= 2.50 && drl >= 80) {
+      sBadgeText = "Học bổng Khá";
+      sBadgeClass = "status-safe";
+      sDetailText = `Đủ điều kiện xét cấp Học bổng loại Khá (Thưởng bằng 80% học phí kỳ theo Điều 13 NTU).`;
+    } else {
+      sBadgeText = "Chưa đạt Học bổng";
+      sBadgeClass = "status-none";
+      sDetailText = `Cần ĐTBCHK ≥ 2.50 và Điểm rèn luyện ≥ 80 điểm để xét học bổng theo Điều 12.`;
+    }
+
+    if (elements.scholarshipBadge) {
+      elements.scholarshipBadge.textContent = sBadgeText;
+      elements.scholarshipBadge.className = `badge-status ${sBadgeClass}`;
+    }
+    if (elements.scholarshipDetail) {
+      elements.scholarshipDetail.textContent = sDetailText;
+    }
+
+    // Evaluate Academic Warning
+    let wBadgeText = "An toàn";
+    let wBadgeClass = "status-safe";
+    let wDetailText = "";
+
+    if (gpa < 1.0) {
+      wBadgeText = "⚠️ Cảnh báo học vụ";
+      wBadgeClass = "status-danger";
+      wDetailText = `Cảnh báo: Điểm TBHK đạt ${gpa.toFixed(2)} (< 1.00) thuộc diện CẢNH BÁO HỌC VỤ theo Điều 7 NTU.`;
+    } else if (gpa < (1.0 + year * 0.15)) {
+      wBadgeText = "Cần nỗ lực";
+      wBadgeClass = "status-none";
+      wDetailText = `Điểm TBHK đạt ${gpa.toFixed(2)} ở mức cận an toàn cho Năm ${year}. Bạn nên học cải thiện môn điểm D.`;
+    } else {
+      wBadgeText = "Học lực An toàn";
+      wBadgeClass = "status-safe";
+      wDetailText = `Điểm TBHK đạt ${gpa.toFixed(2)} vững vàng trên ngưỡng cảnh báo học vụ.`;
+    }
+
+    if (elements.warningBadge) {
+      elements.warningBadge.textContent = wBadgeText;
+      elements.warningBadge.className = `badge-status ${wBadgeClass}`;
+    }
+    if (elements.warningDetail) {
+      elements.warningDetail.textContent = wDetailText;
+    }
+  }
+
+  function convertScore10() {
+    const s10 = parseFloat(elements.inputScore10?.value) || 0.0;
+    let gradeLetter = "F";
+    let grade4 = "0.0";
+    let rank = "Kém (Học lại)";
+    let rowId = "row-grade-f";
+
+    if (s10 >= 8.5) {
+      gradeLetter = "A"; grade4 = "4.0"; rank = "Giỏi / Xuất sắc"; rowId = "row-grade-a";
+    } else if (s10 >= 8.0) {
+      gradeLetter = "B+"; grade4 = "3.5"; rank = "Khá giỏi"; rowId = "row-grade-bp";
+    } else if (s10 >= 7.0) {
+      gradeLetter = "B"; grade4 = "3.0"; rank = "Khá"; rowId = "row-grade-b";
+    } else if (s10 >= 6.5) {
+      gradeLetter = "C+"; grade4 = "2.5"; rank = "Trung bình khá"; rowId = "row-grade-cp";
+    } else if (s10 >= 5.5) {
+      gradeLetter = "C"; grade4 = "2.0"; rank = "Trung bình"; rowId = "row-grade-c";
+    } else if (s10 >= 5.0) {
+      gradeLetter = "D+"; grade4 = "1.5"; rank = "Trung bình yếu"; rowId = "row-grade-dp";
+    } else if (s10 >= 4.0) {
+      gradeLetter = "D"; grade4 = "1.0"; rank = "Đạt (Tích lũy)"; rowId = "row-grade-d";
+    } else {
+      gradeLetter = "F"; grade4 = "0.0"; rank = "Không đạt (Học lại)"; rowId = "row-grade-f";
+    }
+
+    if (elements.convertResultBadge) {
+      elements.convertResultBadge.textContent = `Điểm ${gradeLetter} (${grade4}) - ${rank}`;
+    }
+
+    const allGradeRows = document.querySelectorAll(".mini-grade-table tbody tr");
+    allGradeRows.forEach((r) => r.classList.remove("highlight-grade-row"));
+    const targetRow = document.getElementById(rowId);
+    if (targetRow) {
+      targetRow.classList.add("highlight-grade-row");
+    }
+  }
+
+  // =========================================================================
+  // Live Camera Scanner Logic
+  // =========================================================================
+  function setupCameraScannerEvents() {
+    if (elements.btnCloseScanner) elements.btnCloseScanner.addEventListener("click", closeCameraScannerModal);
+    if (elements.modalCameraScanner) {
+      elements.modalCameraScanner.addEventListener("click", (e) => {
+        if (e.target === elements.modalCameraScanner) closeCameraScannerModal();
+      });
+    }
+
+    if (elements.btnSwitchCamera) {
+      elements.btnSwitchCamera.addEventListener("click", async () => {
+        state.cameraFacingMode = state.cameraFacingMode === "environment" ? "user" : "environment";
+        await startCameraStream();
+      });
+    }
+
+    if (elements.btnCaptureScan) elements.btnCaptureScan.addEventListener("click", handleCaptureFrame);
+    if (elements.btnRetakeScan) elements.btnRetakeScan.addEventListener("click", handleRetakeScan);
+    if (elements.btnConfirmUploadScan) elements.btnConfirmUploadScan.addEventListener("click", handleConfirmUploadScan);
+  }
+
+  async function openCameraScannerModal() {
+    if (!elements.modalCameraScanner) return;
+    elements.modalCameraScanner.style.display = "flex";
+    elements.modalCameraScanner.setAttribute("aria-hidden", "false");
+
+    if (elements.scannerViewContainer) elements.scannerViewContainer.style.display = "flex";
+    if (elements.scannerSnapshotView) elements.scannerSnapshotView.style.display = "none";
+    if (elements.btnCaptureScan) elements.btnCaptureScan.style.display = "inline-flex";
+    if (elements.btnConfirmUploadScan) elements.btnConfirmUploadScan.style.display = "none";
+
+    const dateStr = new Date().toLocaleString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    if (elements.scannerDocTitle) {
+      elements.scannerDocTitle.value = `Tài liệu Scan Camera - ${dateStr}`;
+    }
+
+    await startCameraStream();
+  }
+
+  function closeCameraScannerModal() {
+    stopCameraStream();
+    if (elements.modalCameraScanner) {
+      elements.modalCameraScanner.style.display = "none";
+      elements.modalCameraScanner.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  async function startCameraStream() {
+    stopCameraStream();
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showToast("Trình duyệt không hỗ trợ WebRTC Camera trực tiếp.", "error", 5000);
+      return;
+    }
+
+    try {
+      const constraints = {
+        video: {
+          facingMode: { ideal: state.cameraFacingMode || "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: false,
+      };
+
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
+
+      state.mediaStream = stream;
+      if (elements.cameraStream) {
+        elements.cameraStream.srcObject = stream;
+        elements.cameraStream.play().catch(() => {});
+      }
+    } catch (err) {
+      showToast("Không thể mở Camera (chưa cấp quyền hoặc qua HTTP).", "error", 5000);
+    }
+  }
+
+  function stopCameraStream() {
+    if (state.mediaStream) {
+      try {
+        state.mediaStream.getTracks().forEach((track) => track.stop());
+      } catch {}
+      state.mediaStream = null;
+    }
+    if (elements.cameraStream) {
+      elements.cameraStream.srcObject = null;
+    }
+  }
+
+  function handleCaptureFrame() {
+    if (!elements.cameraStream || !elements.cameraCanvas) return;
+
+    const video = elements.cameraStream;
+    const canvas = elements.cameraCanvas;
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, width, height);
+
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return;
+
+        state.capturedBlob = blob;
+
+        if (elements.scannerSnapshotImg) {
+          elements.scannerSnapshotImg.src = URL.createObjectURL(blob);
+        }
+        if (elements.scannerViewContainer) elements.scannerViewContainer.style.display = "none";
+        if (elements.scannerSnapshotView) elements.scannerSnapshotView.style.display = "flex";
+
+        if (elements.btnCaptureScan) elements.btnCaptureScan.style.display = "none";
+        if (elements.btnConfirmUploadScan) elements.btnConfirmUploadScan.style.display = "inline-flex";
+
+        stopCameraStream();
+        showToast("Đã chụp khung hình văn bản! Nhấn 'Nạp vào Kho Tri thức'.", "success");
+      },
+      "image/jpeg",
+      0.95
+    );
+  }
+
+  async function handleRetakeScan() {
+    state.capturedBlob = null;
+    if (elements.scannerSnapshotView) elements.scannerSnapshotView.style.display = "none";
+    if (elements.scannerViewContainer) elements.scannerViewContainer.style.display = "flex";
+    if (elements.btnConfirmUploadScan) elements.btnConfirmUploadScan.style.display = "none";
+    if (elements.btnCaptureScan) elements.btnCaptureScan.style.display = "inline-flex";
+
+    await startCameraStream();
+  }
+
+  async function handleConfirmUploadScan() {
+    if (!state.capturedBlob) return;
+
+    const title = elements.scannerDocTitle ? elements.scannerDocTitle.value.trim() : "";
+    const uploadBtn = elements.btnConfirmUploadScan;
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = `<span>⏳ Đang nhận diện OCR...</span>`;
+
+    try {
+      showToast("Đang gửi ảnh lên máy chủ để xử lý OCR & Vector...", "info", 8000);
+      const res = await window.ApiService.scanCameraDocument(state.capturedBlob, title);
+      showToast(`Quét thành công! Đã trích xuất ${res.total_chunks} đoạn quy chế.`, "success", 4000);
+
+      closeCameraScannerModal();
+      await loadDocuments();
+    } catch (err) {
+      showToast(`Lỗi khi quét tài liệu: ${err.message}`, "error", 6000);
+    } finally {
+      uploadBtn.disabled = false;
+      uploadBtn.innerHTML = `<span>🚀 Nạp vào Kho Tri thức</span>`;
+    }
+  }
+
+  // =========================================================================
+  // Rename Session Modal Logic
+  // =========================================================================
+  function setupRenameSessionModalEvents() {
+    if (elements.btnCloseRename) elements.btnCloseRename.addEventListener("click", closeRenameModal);
+    if (elements.btnCancelRename) elements.btnCancelRename.addEventListener("click", closeRenameModal);
+    if (elements.modalRenameSession) {
+      elements.modalRenameSession.addEventListener("click", (e) => {
+        if (e.target === elements.modalRenameSession) closeRenameModal();
+      });
+    }
+    if (elements.btnConfirmRename) elements.btnConfirmRename.addEventListener("click", handleConfirmRenameSession);
+    if (elements.inputSessionRename) {
+      elements.inputSessionRename.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          handleConfirmRenameSession();
+        }
+      });
+    }
+  }
+
+  function openRenameModal(sessionId, currentTitle) {
+    state.renamingSessionId = sessionId;
+    if (elements.inputSessionRename) {
+      elements.inputSessionRename.value = currentTitle || "";
+    }
+    if (elements.modalRenameSession) {
+      elements.modalRenameSession.style.display = "flex";
+      elements.modalRenameSession.setAttribute("aria-hidden", "false");
+      setTimeout(() => elements.inputSessionRename?.focus(), 50);
+    }
+  }
+
+  function closeRenameModal() {
+    state.renamingSessionId = null;
+    if (elements.modalRenameSession) {
+      elements.modalRenameSession.style.display = "none";
+      elements.modalRenameSession.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  async function handleConfirmRenameSession() {
+    if (!state.renamingSessionId) return;
+
+    const newTitle = elements.inputSessionRename ? elements.inputSessionRename.value.trim() : "";
+    if (!newTitle) {
+      showToast("Vui lòng nhập tiêu đề cho cuộc trò chuyện.", "info");
+      return;
+    }
+
+    try {
+      await window.ApiService.updateSession(state.renamingSessionId, { title: newTitle });
+      showToast("Đã đổi tên cuộc trò chuyện thành công.", "success", 2000);
+      closeRenameModal();
+      await loadSessionsList();
+    } catch (err) {
+      showToast(`Lỗi khi đổi tên: ${err.message}`, "error");
+    }
+  }
+
+  // =========================================================================
+  // Health Status
+  // =========================================================================
+  async function refreshHealthStatus() {
+    try {
+      const health = await window.ApiService.checkHealth();
+      if (elements.statusDot && elements.statusText) {
+        if (health.status === "healthy") {
+          elements.statusDot.className = "status-dot online";
+          elements.statusText.textContent = "Hệ thống NTU RAG sẵn sàng";
+        } else {
+          elements.statusDot.className = "status-dot degraded";
+          elements.statusText.textContent = "Chế độ RAG suy giảm";
+        }
+      }
+    } catch {
+      if (elements.statusDot && elements.statusText) {
+        elements.statusDot.className = "status-dot offline";
+        elements.statusText.textContent = "Không thể kết nối máy chủ";
+      }
+    }
+  }
+
+  // =========================================================================
+  // Lightweight Markdown Parser
   // =========================================================================
   function escapeHtml(unsafe) {
     if (!unsafe) return "";
@@ -1622,7 +1918,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const lines = text.split("\n");
     const result = [];
     let inList = false;
-    let listType = ""; // 'ul' or 'ol'
+    let listType = "";
     let inTable = false;
     let tableRows = [];
 
@@ -1678,20 +1974,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const inlineFormat = (str) => {
       if (!str) return "";
       let s = escapeHtml(str);
-      // Bold
       s = s.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-      // Italic
       s = s.replace(/\*(.*?)\*/g, "<em>$1</em>");
-      // Inline Code
-      s = s.replace(/`([^`]+)`/g, '<code class="bot-code">$1</code>');
-      // Legal term badges
+      s = s.replace(/`([^`]+)`/g, '<code class="badge-legal">$1</code>');
       s = s.replace(/\b(Điều\s+\d+[\.:]?)/gi, '<span class="badge-legal">$1</span>');
       s = s.replace(/\b(Khoản\s+\d+[\.:]?)/gi, '<span class="badge-legal">$1</span>');
-      s = s.replace(
-        /\b(CHƯƠNG\s+[IVXLCDM\d]+)/gi,
-        '<span class="badge-legal" style="background:rgba(245,158,11,0.2);color:#fbbf24;border-color:rgba(245,158,11,0.4);">$1</span>'
-      );
-      // Markdown links: [text](url)
       s = s.replace(
         /\[([^\]]+)\]\(([^)]+)\)/g,
         '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;text-decoration:underline;">$1</a>'
@@ -1702,7 +1989,6 @@ document.addEventListener("DOMContentLoaded", () => {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
 
-      // Table line: starts and ends with |
       if (line.startsWith("|") && line.endsWith("|")) {
         closeList();
         inTable = true;
@@ -1713,31 +1999,23 @@ document.addEventListener("DOMContentLoaded", () => {
         flushTable();
       }
 
-      // Horizontal Divider: --- or ***
       if (/^(\*{3,}|-{3,}|_{3,})$/.test(line)) {
         closeList();
-        result.push('<hr class="bot-divider">');
+        result.push('<hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:14px 0;">');
         continue;
       }
 
-      // Headings
       if (line.startsWith("### ")) {
         closeList();
-        result.push(`<h3 class="bot-heading-3">${inlineFormat(line.slice(4))}</h3>`);
+        result.push(`<h3 style="font-size:1.05rem;font-weight:600;color:#fff;margin:12px 0 6px;">${inlineFormat(line.slice(4))}</h3>`);
         continue;
       }
-      if (line.startsWith("## ")) {
+      if (line.startsWith("## ") || line.startsWith("# ")) {
         closeList();
-        result.push(`<h2 class="bot-heading-2">${inlineFormat(line.slice(3))}</h2>`);
-        continue;
-      }
-      if (line.startsWith("# ")) {
-        closeList();
-        result.push(`<h2 class="bot-heading-2">${inlineFormat(line.slice(2))}</h2>`);
+        result.push(`<h2 style="font-size:1.15rem;font-weight:600;color:#fff;margin:14px 0 8px;">${inlineFormat(line.replace(/^#+\s*/, ""))}</h2>`);
         continue;
       }
 
-      // Ordered list (1. , 2. )
       const olMatch = line.match(/^(\d+)\.\s+(.*)$/);
       if (olMatch) {
         if (!inList || listType !== "ol") {
@@ -1750,7 +2028,6 @@ document.addEventListener("DOMContentLoaded", () => {
         continue;
       }
 
-      // Unordered list (- , * )
       const ulMatch = line.match(/^[-*]\s+(.*)$/);
       if (ulMatch) {
         if (!inList || listType !== "ul") {
@@ -1763,27 +2040,20 @@ document.addEventListener("DOMContentLoaded", () => {
         continue;
       }
 
-      // Empty line / paragraph break
       closeList();
-      if (!line) {
-        continue;
-      }
+      if (!line) continue;
 
-      // Blockquote
       if (line.startsWith("&gt; ") || line.startsWith("> ")) {
         const quoteText = line.replace(/^(&gt;|>)\s+/, "");
-        result.push(`<blockquote>${inlineFormat(quoteText)}</blockquote>`);
+        result.push(`<blockquote style="border-left:3px solid #38bdf8;padding-left:12px;color:#c4c7c5;margin:8px 0;">${inlineFormat(quoteText)}</blockquote>`);
         continue;
       }
 
-      // Standard paragraph
       result.push(`<p>${inlineFormat(line)}</p>`);
     }
 
     closeList();
-    if (inTable) {
-      flushTable();
-    }
+    if (inTable) flushTable();
 
     return result.join("");
   }

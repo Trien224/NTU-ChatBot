@@ -21,6 +21,9 @@ NGUYÊN TẮC HOẠT ĐỘNG BẮT BUỘC:
 """
 
 
+import re
+
+
 def format_offline_fallback_response(context: str, prompt: str) -> str:
     """Synthesize structured response directly from retrieved regulations when Gemini API is unavailable."""
     if not context or "Không tìm thấy" in context:
@@ -32,9 +35,12 @@ def format_offline_fallback_response(context: str, prompt: str) -> str:
             "- **Website**: [ntu.edu.vn](https://ntu.edu.vn)"
         )
 
+    # Clean technical labels like [Tài liệu 1]: to keep output natural and clean
+    cleaned_context = re.sub(r"\[Tài liệu\s+\d+\]:\s*", "", context).strip()
+
     return (
         f"Căn cứ theo **Quy chế Đào tạo trình độ Đại học - Trường Đại học Nguyễn Trãi (NTU)**, nội dung quy định chi tiết giải đáp cho câu hỏi của bạn như sau:\n\n"
-        f"{context}\n\n"
+        f"{cleaned_context}\n\n"
         f"---\n"
         f"*(💡 Phản hồi được trích xuất và tổng hợp trực tiếp từ Cơ sở dữ liệu Quy chế NTU qua cơ chế Smart Offline Fallback)*"
     )

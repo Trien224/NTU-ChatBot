@@ -40,9 +40,33 @@ Rất hân hạnh được đồng hành và hỗ trợ bạn trong suốt quá 
 💡 *Bạn có thể bấm vào các gợi ý bên dưới hoặc hỏi bất kỳ câu hỏi nào về: **Quy chế tín chỉ, Đăng ký học phần, Điểm rèn luyện, Học bổng KKHT, Cảnh báo học vụ, hay Điều kiện xét tốt nghiệp**!*"""
 
 
+USER_WHOAMI_TEXT = """**Chào bạn!**
+
+Bạn là **Sinh viên / Người dùng** đang trực tiếp tra cứu và tương tác với hệ thống **NTU EduBot** của **Trường Đại học Nguyễn Trãi (NTU)**.
+
+Tại đây, bạn có toàn quyền:
+- 🎓 **Tra cứu Học bổng & Điểm rèn luyện**: Nắm rõ tiêu chuẩn xét học bổng KKHT (Xuất sắc, Giỏi, Khá) và khung đánh giá ĐRL sinh viên.
+- 📅 **Lộ trình Tín chỉ & Đăng ký học phần**: Tra cứu số tín chỉ tối thiểu/tối đa mỗi học kỳ chính, đăng ký học lại và cải thiện điểm.
+- ⚖️ **Quy chế Học vụ & Bảo lưu**: Kiểm tra ngưỡng cảnh báo học vụ, thủ tục gia hạn học phí và hồ sơ bảo lưu kết quả học tập.
+- 🏆 **Chuẩn đầu ra & Tốt nghiệp**: Điều kiện nhận đồ án/khóa luận tốt nghiệp, chuẩn đầu ra Ngoại ngữ & Tin học NTU.
+- 📸 **Nạp & Quét tài liệu Đa phương thức**: Nạp thêm văn bản quy chế bằng file PDF, hình ảnh, video/audio bài giảng hoặc quét trực tiếp từ Camera.
+
+💡 *Tôi có thể giúp bạn giải đáp thắc mắc học vụ cụ thể nào ngay bây giờ không?*"""
+
+
 def classify_intent(query: str) -> Optional[str]:
-    """Lightweight intent classifier for greeting and general university introductions."""
+    """Lightweight intent classifier for greeting, whoami, and general university introductions."""
     q = query.lower().strip()
+
+    # "Tôi là ai" check
+    whoami_patterns = [
+        r"^(tôi|em|mình)\s+là\s+ai(\s+thế|\s+vậy|\s+đấy)?[\s\?\.]*$",
+        r"^(bạn|bot)\s+(nghĩ|biết)\s+(tôi|em|mình)\s+là\s+ai[\s\?\.]*$",
+        r"^cho\s+(tôi|em)\s+biết\s+(tôi|em)\s+là\s+ai[\s\?\.]*$",
+    ]
+    for pattern in whoami_patterns:
+        if re.search(pattern, q):
+            return "whoami"
 
     # Greetings check
     greeting_patterns = [
@@ -199,14 +223,15 @@ class RAGPipeline:
         """Execute complete non-streaming RAG pipeline."""
         # Check intent classifier
         intent = classify_intent(question)
-        if intent in ("greeting", "ntu_intro"):
+        if intent in ("greeting", "ntu_intro", "whoami"):
             sources = []
             if intent == "ntu_intro":
                 sources = await self._get_intro_sources(limit=2)
 
+            reply_text = USER_WHOAMI_TEXT if intent == "whoami" else NTU_INTRO_TEXT
             await self.chat_repo.save_message(session_id=session_id, role="user", content=question)
-            await self.chat_repo.save_message(session_id=session_id, role="assistant", content=NTU_INTRO_TEXT, sources=sources)
-            return ChatResponse(session_id=session_id, answer=NTU_INTRO_TEXT, sources=sources)
+            await self.chat_repo.save_message(session_id=session_id, role="assistant", content=reply_text, sources=sources)
+            return ChatResponse(session_id=session_id, answer=reply_text, sources=sources)
 
         # Fetch conversation history
         history: List[ChatMessage] = await self.chat_repo.get_history(session_id, limit=6)
@@ -249,14 +274,15 @@ class RAGPipeline:
         """Execute streaming RAG pipeline yielding Server-Sent Events (SSE) compatible JSON strings."""
         # Check intent classifier
         intent = classify_intent(question)
-        if intent in ("greeting", "ntu_intro"):
+        if intent in ("greeting", "ntu_intro", "whoami"):
             sources = []
             if intent == "ntu_intro":
                 sources = await self._get_intro_sources(limit=2)
 
             yield f"event: sources\ndata: {json.dumps(sources, ensure_ascii=False)}\n\n"
 
-            words = NTU_INTRO_TEXT.split(" ")
+            reply_text = USER_WHOAMI_TEXT if intent == "whoami" else NTU_INTRO_TEXT
+            words = reply_text.split(" ")
             for i, word in enumerate(words):
                 chunk = word if i == len(words) - 1 else word + " "
                 payload = json.dumps({"token": chunk}, ensure_ascii=False)
@@ -266,9 +292,9 @@ class RAGPipeline:
             # Persist turns
             try:
                 await self.chat_repo.save_message(session_id=session_id, role="user", content=question)
-                await self.chat_repo.save_message(session_id=session_id, role="assistant", content=NTU_INTRO_TEXT, sources=sources)
+                await self.chat_repo.save_message(session_id=session_id, role="assistant", content=reply_text, sources=sources)
             except Exception as save_err:
-                logger.error("Failed to persist greeting turn: %s", save_err)
+                logger.error("Failed to persist turn: %s", save_err)
 
             yield f"event: done\ndata: {json.dumps({'status': 'completed', 'session_id': session_id}, ensure_ascii=False)}\n\n"
             return

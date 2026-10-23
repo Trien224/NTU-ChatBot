@@ -68,3 +68,34 @@ class ChatHistoryResponse(BaseModel):
         default_factory=list,
         description="Chronological list of conversation messages",
     )
+
+
+class SessionMetadata(BaseModel):
+    """Metadata schema representing a conversational session."""
+
+    session_id: str = Field(..., description="Unique session identifier")
+    title: str = Field(default="Cuộc trò chuyện mới", description="Title or summary of session")
+    is_pinned: bool = Field(default=False, description="Whether this session is pinned at top")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Session creation timestamp",
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Session last updated timestamp",
+    )
+    message_count: int = Field(default=0, description="Total number of messages in session")
+
+
+class SessionUpdateRequest(BaseModel):
+    """Request payload to rename or pin/unpin a session."""
+
+    title: Optional[str] = Field(None, description="New title for the session")
+    is_pinned: Optional[bool] = Field(None, description="Pinned status")
+
+
+class SessionListResponse(BaseModel):
+    """Response returned when listing available chat sessions."""
+
+    total_sessions: int = Field(default=0, description="Total count of sessions")
+    sessions: List[SessionMetadata] = Field(default_factory=list, description="List of sessions")

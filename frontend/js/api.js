@@ -265,6 +265,54 @@ class ApiService {
     if (!res.ok) return { lang: "vi-VN", rate: 1.0, pitch: 1.0 };
     return await res.json();
   }
+
+  /**
+   * Fetch list of all conversation sessions with titles and pinned status.
+   * @param {number} limit - Maximum number of sessions.
+   * @returns {Promise<Object>} Object with sessions array.
+   */
+  async getSessions(limit = 50) {
+    const res = await fetch(`${this.baseUrl}/api/v1/chat/sessions?limit=${limit}`);
+    if (!res.ok) throw new Error(`Failed to fetch sessions: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Update session title or pinned status.
+   * @param {string} sessionId - Target session ID.
+   * @param {Object} updateData - Object with optional title and/or is_pinned.
+   * @returns {Promise<Object>} Updated SessionMetadata.
+   */
+  async updateSession(sessionId, updateData = {}) {
+    const res = await fetch(`${this.baseUrl}/api/v1/chat/sessions/${encodeURIComponent(sessionId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updateData),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to update session: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  /**
+   * Trigger download of Microsoft Word (.doc) consultation record for a session.
+   * @param {string} sessionId - Target session ID.
+   */
+  exportSessionWordUrl(sessionId) {
+    return `${this.baseUrl}/api/v1/chat/sessions/${encodeURIComponent(sessionId)}/export-word`;
+  }
+
+  async exportSessionWord(sessionId) {
+    const url = this.exportSessionWordUrl(sessionId);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `NTU_EduBot_TuVanHocVu_${sessionId.slice(0, 12)}.doc`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 }
 
 // Attach globally
